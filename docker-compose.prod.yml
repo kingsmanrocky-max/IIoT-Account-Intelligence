@@ -45,25 +45,13 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: iiot-backend-prod
+    env_file:
+      - ./backend/.env
     environment:
-      DATABASE_URL: postgresql://iiot_user:SecurePassword2025@postgres:5432/iiot_intelligence
-      REDIS_URL: redis://redis:6379
+      # Override any .env values if needed via env vars
       NODE_ENV: production
       PORT: 4001
-      API_URL: ${API_URL:-http://localhost:4001}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRATION: ${JWT_EXPIRATION:-7d}
-      REFRESH_TOKEN_EXPIRATION: ${REFRESH_TOKEN_EXPIRATION:-30d}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      XAI_API_KEY: ${XAI_API_KEY}
-      LLM_PRIMARY_PROVIDER: ${LLM_PRIMARY_PROVIDER:-openai}
-      OPENAI_DEFAULT_MODEL: ${OPENAI_DEFAULT_MODEL:-gpt-4}
-      WEBEX_BOT_TOKEN: ${WEBEX_BOT_TOKEN}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:4000}
       STORAGE_PATH: /app/storage/reports
-      LOG_LEVEL: ${LOG_LEVEL:-info}
-      REPORT_RETENTION_DAYS: ${REPORT_RETENTION_DAYS:-90}
     ports:
       - "4001:4001"
     volumes:
@@ -86,9 +74,10 @@ services:
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api}
     container_name: iiot-frontend-prod
+    env_file:
+      - ./frontend/.env.production
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api}
     ports:
       - "4000:4000"
     depends_on:
