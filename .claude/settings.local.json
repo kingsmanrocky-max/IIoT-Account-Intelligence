@@ -70,7 +70,8 @@
       "Bash(git add:*)",
       "Bash(del nul)",
       "Bash(del backendnul)",
-      "Bash(del frontendnul)"
+      "Bash(del frontendnul)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []
