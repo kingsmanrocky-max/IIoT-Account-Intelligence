@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+@theme {
+  /* Meraki color palette */
+  --color-meraki-midnight: #1a2332;
+  --color-meraki-midnight-light: #2d3d54;
+  --color-meraki-midnight-dark: #0f1419;
+
+  --color-meraki-blue: #049FD9;
+  --color-meraki-blue-light: #70e9ff;
+  --color-meraki-blue-dark: #006494;
+
+  --color-meraki-gray-50: #fafafa;
+  --color-meraki-gray-100: #f7f7f7;
+  --color-meraki-gray-200: #e8e8e8;
+  --color-meraki-gray-300: #d1d5db;
+  --color-meraki-gray-400: #9ca3af;
+  --color-meraki-gray-500: #6b7280;
+  --color-meraki-gray-600: #4b5563;
+  --color-meraki-gray-700: #374151;
+  --color-meraki-gray-800: #1f2937;
+  --color-meraki-gray-900: #111827;
+
+  /* Border radius */
+  --radius-card: 12px;
+  --radius-input: 6px;
+
+  /* Shadows */
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.05);
+  --shadow-card-hover: 0 4px 6px -1px rgb(0 0 0 / 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #fafafa;
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button, a, input, textarea, select {
+  transition: all 150ms ease-in-out;
+}
+
+:focus-visible {
+  outline: 2px solid #049FD9;
+  outline-offset: 2px;
+}

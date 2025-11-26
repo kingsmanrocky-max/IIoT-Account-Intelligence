@@ -1,0 +1,462 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User Management
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String
+  firstName     String?
+  lastName      String?
+  role          UserRole  @default(USER)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lastLoginAt   DateTime?
+
+  profile       UserProfile?
+  reports       Report[]
+  templates     Template[]
+  schedules     Schedule[]
+
+  @@index([email])
+}
+
+enum UserRole {
+  ADMIN
+  USER
+}
+
+model UserProfile {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  defaultLLMModel   String?
+  timezone          String   @default("UTC")
+  preferences       Json?
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// Template Management
+model Template {
+  id              String         @id @default(uuid())
+  userId          String
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name            String
+  description     String?
+  workflowType    WorkflowType
+  configuration   Json
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  schedules       Schedule[]
+
+  @@index([userId])
+  @@index([workflowType])
+}
+
+enum WorkflowType {
+  ACCOUNT_INTELLIGENCE
+  COMPETITIVE_INTELLIGENCE
+  NEWS_DIGEST
+}
+
+// Report Management
+model Report {
+  id              String         @id @default(uuid())
+  userId          String
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title           String
+  workflowType    WorkflowType
+  configuration   Json
+  inputData       Json
+  enrichedData    Json?
+
+  status          ReportStatus   @default(PENDING)
+  llmModel        String
+  generatedContent Json?
+
+  format          ReportFormat[]
+  filePaths       Json?
+
+  error           String?
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  completedAt     DateTime?
+
+  scheduleId      String?
+  schedule        Schedule?      @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+
+  deliveries         ReportDelivery[]
+  documentExports    DocumentExport[]
+  requestedFormats   ReportFormat[]  @default([])
+  podcastGeneration  PodcastGeneration?
+
+  @@index([userId])
+  @@index([workflowType])
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum ReportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum ReportFormat {
+  PDF
+  DOCX
+}
+
+// Document Export Job Tracking
+model DocumentExport {
+  id              String          @id @default(uuid())
+  reportId        String
+  report          Report          @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  format          ReportFormat
+  status          ExportStatus    @default(PENDING)
+
+  retryCount      Int             @default(0)
+  maxRetries      Int             @default(3)
+
+  filePath        String?
+  fileSize        Int?
+
+  error           String?
+
+  createdAt       DateTime        @default(now())
+  startedAt       DateTime?
+  completedAt     DateTime?
+  expiresAt       DateTime?
+
+  triggeredBy     ExportTrigger   @default(ON_DEMAND)
+
+  @@index([reportId])
+  @@index([status])
+  @@unique([reportId, format])
+}
+
+enum ExportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  EXPIRED
+}
+
+enum ExportTrigger {
+  ON_DEMAND
+  EAGER
+  SCHEDULED
+}
+
+model ReportDelivery {
+  id              String           @id @default(uuid())
+  reportId        String
+  report          Report           @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  method          DeliveryMethod
+  destination     String           // Email address or Webex room ID
+  destinationType String           @default("email")  // 'email' | 'roomId'
+  contentType     String           @default("ATTACHMENT") // 'ATTACHMENT' | 'SUMMARY_LINK'
+  format          ReportFormat?    // PDF | DOCX (for attachment mode)
+  status          DeliveryStatus   @default(PENDING)
+  error           String?
+  messageId       String?          // Webex message ID for tracking
+  retryCount      Int              @default(0)
+  maxRetries      Int              @default(3)
+
+  createdAt       DateTime         @default(now())
+  deliveredAt     DateTime?
+
+  @@index([reportId])
+  @@index([status])
+}
+
+enum DeliveryMethod {
+  DOWNLOAD
+  WEBEX
+}
+
+enum DeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+// Schedule Management
+model Schedule {
+  id              String         @id @default(uuid())
+  userId          String
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name            String
+  description     String?
+
+  templateId      String
+  template        Template       @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  cronExpression  String
+  timezone        String         @default("UTC")
+
+  isActive        Boolean        @default(true)
+
+  deliveryMethod  DeliveryMethod
+  deliveryDestination String?
+
+  lastRunAt       DateTime?
+  nextRunAt       DateTime?
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  reports         Report[]
+
+  @@index([userId])
+  @@index([isActive])
+  @@index([nextRunAt])
+}
+
+// System Configuration
+model SystemConfig {
+  id              String   @id @default(uuid())
+  key             String   @unique
+  value           String
+  isEncrypted     Boolean  @default(false)
+  description     String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([key])
+}
+
+// Analytics
+model ReportAnalytics {
+  id              String       @id @default(uuid())
+  date            DateTime     @db.Date
+  workflowType    WorkflowType
+
+  totalGenerated  Int          @default(0)
+  totalFailed     Int          @default(0)
+  avgDuration     Int?
+
+  @@unique([date, workflowType])
+  @@index([date])
+}
+
+model UserActivity {
+  id              String   @id @default(uuid())
+  userId          String
+  action          String
+  details         Json?
+  ipAddress       String?
+  userAgent       String?
+
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// Podcast Generation
+enum PodcastStatus {
+  PENDING
+  GENERATING_SCRIPT
+  GENERATING_AUDIO
+  MIXING
+  COMPLETED
+  FAILED
+}
+
+enum PodcastTemplate {
+  EXECUTIVE_BRIEF
+  STRATEGIC_DEBATE
+  INDUSTRY_PULSE
+}
+
+enum PodcastDuration {
+  SHORT
+  STANDARD
+  LONG
+}
+
+enum TTSVoice {
+  ALLOY
+  ECHO
+  FABLE
+  ONYX
+  NOVA
+  SHIMMER
+}
+
+enum PodcastTrigger {
+  ON_DEMAND
+  EAGER
+  SCHEDULED
+}
+
+model PodcastGeneration {
+  id                String          @id @default(uuid())
+  reportId          String          @unique
+  report            Report          @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  template          PodcastTemplate
+  duration          PodcastDuration
+
+  script            Json?
+  scriptTokens      Int?
+  scriptGeneratedAt DateTime?
+
+  audioSegments     Json?
+  audioSegmentCount Int?
+
+  finalAudioPath    String?
+  durationSeconds   Int?
+  fileSizeBytes     BigInt?
+
+  status            PodcastStatus   @default(PENDING)
+  error             String?
+  retryCount        Int             @default(0)
+  maxRetries        Int             @default(3)
+
+  estimatedCost     Decimal?        @db.Decimal(10, 4)
+  triggeredBy       PodcastTrigger  @default(ON_DEMAND)
+
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  startedAt         DateTime?
+  completedAt       DateTime?
+  expiresAt         DateTime?
+
+  deliveries        PodcastDelivery[]
+
+  @@index([reportId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model PodcastHost {
+  id                String          @id @default(uuid())
+  name              String
+  role              String
+  personality       String
+  voice             TTSVoice
+  voiceSpeed        Decimal         @default(1.0) @db.Decimal(2, 1)
+  templateType      PodcastTemplate
+  hostOrder         Int             @default(0)
+  personalityPrompt String?         @db.Text
+  isActive          Boolean         @default(true)
+
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([templateType])
+  @@index([isActive])
+}
+
+model PodcastTemplateConfig {
+  id                     String          @id @default(uuid())
+  templateType           PodcastTemplate @unique
+  name                   String
+  description            String?
+  shortMinutes           Int             @default(5)
+  standardMinutes        Int             @default(12)
+  longMinutes            Int             @default(18)
+  systemPrompt           String          @db.Text
+  temperature            Decimal         @default(0.8) @db.Decimal(2, 1)
+  segmentStructure       Json
+  pauseBetweenSpeakersMs Int             @default(500)
+  isActive               Boolean         @default(true)
+
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+
+  @@index([templateType])
+  @@index([isActive])
+}
+
+model PodcastDelivery {
+  id              String            @id @default(uuid())
+  podcastId       String
+  podcast         PodcastGeneration @relation(fields: [podcastId], references: [id], onDelete: Cascade)
+
+  method          DeliveryMethod    @default(WEBEX)
+  destination     String
+  destinationType String            @default("email")
+  status          DeliveryStatus    @default(PENDING)
+  error           String?
+  messageId       String?
+  retryCount      Int               @default(0)
+  maxRetries      Int               @default(3)
+
+  createdAt       DateTime          @default(now())
+  deliveredAt     DateTime?
+
+  @@index([podcastId])
+  @@index([status])
+}
+
+// Prompt Management
+enum PromptCategory {
+  REPORT_SYSTEM       // System prompts for report workflows
+  REPORT_SECTION      // Section-specific prompts
+  PODCAST_SYSTEM      // Podcast template system prompts
+  PODCAST_HOST        // Host personality prompts
+}
+
+model PromptConfig {
+  id                String          @id @default(uuid())
+  key               String          @unique  // e.g., "ACCOUNT_INTELLIGENCE:system"
+  name              String
+  description       String?
+  category          PromptCategory
+  promptText        String          @db.Text
+  parameters        Json?           // { temperature, maxTokens, etc. }
+  supportedVariables String[]       @default([])
+  currentVersion    Int             @default(1)
+  isActive          Boolean         @default(true)
+  isDefault         Boolean         @default(false)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  createdBy         String?
+  updatedBy         String?
+  versions          PromptVersion[]
+
+  @@index([category])
+  @@index([key])
+}
+
+model PromptVersion {
+  id                String       @id @default(uuid())
+  promptConfigId    String
+  promptConfig      PromptConfig @relation(fields: [promptConfigId], references: [id], onDelete: Cascade)
+  version           Int
+  promptText        String       @db.Text
+  parameters        Json?
+  changeReason      String?
+  changedBy         String?
+  createdAt         DateTime     @default(now())
+
+  @@unique([promptConfigId, version])
+  @@index([promptConfigId])
+}
