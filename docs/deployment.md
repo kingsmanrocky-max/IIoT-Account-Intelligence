@@ -604,10 +604,168 @@ docker-compose -f docker-compose.prod.yml restart backend
 
 ---
 
+## Operational Scripts
+
+The application includes several utility scripts for common operational tasks:
+
+### Deployment Script
+
+Deploy or update the application:
+
+```bash
+./scripts/deploy.sh
+```
+
+Features:
+- Pulls latest code (if using git)
+- Builds Docker containers
+- Runs database migrations
+- Performs health checks
+
+### Health Check Script
+
+Check system health:
+
+```bash
+./scripts/health-check.sh
+```
+
+Verifies:
+- Container status
+- API endpoints
+- Database connectivity
+- Redis connectivity
+
+### Log Viewer
+
+View container logs:
+
+```bash
+# View backend logs
+./scripts/logs.sh backend
+
+# Follow all logs
+./scripts/logs.sh -f
+
+# View last 500 lines of nginx logs
+./scripts/logs.sh -n 500 nginx
+```
+
+### Backup Scripts
+
+See the [Backup and Recovery Guide](./backup-recovery.md) for detailed information.
+
+```bash
+# Full backup (database + storage)
+./scripts/backup-all.sh
+
+# Database only
+./scripts/backup-db.sh
+
+# Storage only
+./scripts/backup-storage.sh
+
+# Restore database
+./scripts/restore-db.sh
+```
+
+### Maintenance Script
+
+Perform maintenance tasks:
+
+```bash
+./scripts/maintenance.sh
+```
+
+Tasks performed:
+- Stops services gracefully
+- Runs database migrations
+- Cleans up old exports
+- Optimizes database
+- Restarts services
+
+### SSL Certificate Generation
+
+For on-premises deployments, generate self-signed SSL certificates:
+
+```bash
+./scripts/generate-ssl-cert.sh
+```
+
+Note: For production with public domains, use Let's Encrypt instead.
+
+---
+
+## On-Premises Deployment
+
+### Network Configuration
+
+For on-premises deployments, ensure:
+
+1. **Firewall Rules:**
+   ```bash
+   # Allow HTTP/HTTPS
+   sudo ufw allow 80/tcp
+   sudo ufw allow 443/tcp
+   ```
+
+2. **DNS or Hosts File:**
+   - Configure internal DNS records pointing to the server
+   - Or update `/etc/hosts` on client machines
+
+3. **Proxy Configuration (if behind corporate proxy):**
+   ```bash
+   # In .env file, add:
+   HTTP_PROXY=http://proxy.company.com:8080
+   HTTPS_PROXY=http://proxy.company.com:8080
+   NO_PROXY=localhost,127.0.0.1
+   ```
+
+### Self-Signed Certificates
+
+For internal deployments:
+
+1. **Generate certificates:**
+   ```bash
+   ./scripts/generate-ssl-cert.sh
+   ```
+
+2. **Update nginx.conf:**
+   Edit `nginx/nginx.conf` and update `server_name` to match your internal domain or IP
+
+3. **Restart nginx:**
+   ```bash
+   docker-compose -f docker-compose.prod.yml restart nginx
+   ```
+
+4. **Trust the certificate on client machines:**
+   - Windows: Import to Trusted Root Certification Authorities
+   - macOS: Add to Keychain and trust
+   - Linux: Copy to `/usr/local/share/ca-certificates/` and run `update-ca-certificates`
+
+### Static IP Configuration
+
+If using a static IP:
+
+1. **Update .env:**
+   ```bash
+   API_URL=https://192.168.1.100/api
+   FRONTEND_URL=https://192.168.1.100
+   ```
+
+2. **Update nginx.conf:**
+   ```nginx
+   server_name 192.168.1.100;
+   ```
+
+---
+
 ## Support
 
 For issues and questions:
-- Check logs first: `docker-compose -f docker-compose.prod.yml logs`
+- Run health check: `./scripts/health-check.sh`
+- Check logs: `./scripts/logs.sh`
+- Review the [Backup and Recovery Guide](./backup-recovery.md)
 - Review this troubleshooting section
 - Check the main README.md
 - Create an issue in the repository

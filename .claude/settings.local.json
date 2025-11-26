@@ -71,7 +71,9 @@
       "Bash(del nul)",
       "Bash(del backendnul)",
       "Bash(del frontendnul)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(git checkout:*)",
+      "Bash(chmod:*)"
     ],
     "deny": [],
     "ask": []

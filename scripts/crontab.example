@@ -1,0 +1,44 @@
+# ==============================================
+# IIoT Intelligence - Cron Jobs Configuration
+# ==============================================
+#
+# To install these cron jobs:
+# 1. Edit this file to match your installation path
+# 2. Copy to crontab: crontab < scripts/crontab.example
+# 3. Verify: crontab -l
+#
+# Note: Update /path/to/iiot-intelligence to your actual installation path
+# Example: /opt/iiot-intelligence or /home/user/iiot-intelligence
+
+# Format: minute hour day month weekday command
+# * * * * * command to be executed
+# │ │ │ │ │
+# │ │ │ │ └─── day of week (0-7, both 0 and 7 represent Sunday)
+# │ │ │ └───── month (1-12)
+# │ │ └─────── day of month (1-31)
+# │ └───────── hour (0-23)
+# └─────────── minute (0-59)
+
+# Set working directory
+IIOT_HOME=/path/to/iiot-intelligence
+
+# Daily database backup at 2:00 AM
+0 2 * * * cd $IIOT_HOME && /bin/bash scripts/backup-db.sh >> logs/backup-db.log 2>&1
+
+# Weekly storage backup (every Sunday at 3:00 AM)
+0 3 * * 0 cd $IIOT_HOME && /bin/bash scripts/backup-storage.sh >> logs/backup-storage.log 2>&1
+
+# Daily cleanup of old Docker resources (at 4:00 AM)
+0 4 * * * docker system prune -f >> $IIOT_HOME/logs/docker-cleanup.log 2>&1
+
+# Weekly database optimization (every Sunday at 5:00 AM)
+0 5 * * 0 docker exec iiot-postgres-prod vacuumdb -U postgres -d iiot_intelligence --analyze >> $IIOT_HOME/logs/db-vacuum.log 2>&1
+
+# Health check every 15 minutes (optional - for monitoring)
+# */15 * * * * cd $IIOT_HOME && /bin/bash scripts/health-check.sh >> logs/health-check.log 2>&1
+
+# Rotate logs monthly (at 1:00 AM on the 1st day of each month)
+0 1 1 * * find $IIOT_HOME/logs -name "*.log" -type f -mtime +30 -delete
+
+# Example: Monthly maintenance (first Sunday of each month at 6:00 AM)
+# 0 6 1-7 * 0 cd $IIOT_HOME && /bin/bash scripts/maintenance.sh >> logs/maintenance.log 2>&1
