@@ -14,7 +14,8 @@ import {
   Folder,
   Target,
   Newspaper,
-  MessageSquare
+  MessageSquare,
+  Building2
 } from 'lucide-react';
 import { useAuth } from '@/lib/contexts/AuthContext';
 
@@ -26,6 +27,7 @@ interface SidebarProps {
 const navigationItems = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['USER', 'ADMIN'] },
   { name: 'Reports', href: '/reports', icon: FileText, roles: ['USER', 'ADMIN'] },
+  { name: 'Account Intel', href: '/account-intelligence', icon: Building2, roles: ['USER', 'ADMIN'] },
   { name: 'Competitive Intel', href: '/competitive-intelligence', icon: Target, roles: ['USER', 'ADMIN'] },
   { name: 'News Digest', href: '/news-digest', icon: Newspaper, roles: ['USER', 'ADMIN'] },
   { name: 'Templates', href: '/templates', icon: Folder, roles: ['USER', 'ADMIN'] },

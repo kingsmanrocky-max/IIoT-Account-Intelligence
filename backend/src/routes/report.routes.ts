@@ -243,6 +243,9 @@ export async function reportRoutes(app: FastifyInstance) {
     },
   }, reportController.enrichCompany.bind(reportController));
 
+  // Parse CSV and normalize company names
+  app.post('/parse-csv-companies', reportController.parseCSVCompanies.bind(reportController));
+
   // Get workflow sections
   app.get('/workflows/:workflowType/sections', {
     schema: {

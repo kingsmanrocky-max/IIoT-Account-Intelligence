@@ -3,6 +3,9 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# Install OpenSSL and other dependencies for Prisma
+RUN apk add --no-cache libc6-compat openssl
+
 # Copy package files
 COPY package*.json ./
 COPY prisma ./prisma
@@ -24,8 +27,8 @@ FROM node:20-alpine AS runner
 
 WORKDIR /app
 
-# Install FFmpeg for podcast audio processing
-RUN apk add --no-cache ffmpeg
+# Install FFmpeg for podcast audio processing and OpenSSL for Prisma
+RUN apk add --no-cache ffmpeg libc6-compat openssl
 
 # Copy built application and dependencies from builder
 COPY --from=builder /app/dist ./dist

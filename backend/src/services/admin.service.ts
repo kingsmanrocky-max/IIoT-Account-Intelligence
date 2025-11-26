@@ -231,7 +231,7 @@ export class AdminService {
       });
 
       if (response.ok) {
-        const data = await response.json();
+        const data = await response.json() as any;
         return {
           success: true,
           message: `Webex connection successful. Bot: ${data.displayName || data.emails?.[0] || 'Connected'}`,

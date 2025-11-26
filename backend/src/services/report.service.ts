@@ -321,6 +321,7 @@ export class ReportService {
           const podcastService = getPodcastService();
           await podcastService.requestPodcast({
             reportId,
+            userId: report.userId,
             template: podcastConfig.template,
             duration: podcastConfig.duration,
             triggeredBy: 'EAGER',

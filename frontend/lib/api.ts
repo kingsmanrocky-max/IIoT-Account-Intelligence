@@ -298,6 +298,18 @@ export interface EnrichCompanyResponse {
   founded?: string;
 }
 
+export interface NormalizedCompany {
+  originalName: string;
+  validatedName: string;
+  confidence: string;
+  isValid: boolean;
+}
+
+export interface ParseCSVResponse {
+  originalCount: number;
+  normalizedCompanies: NormalizedCompany[];
+}
+
 // Auth API
 export const authAPI = {
   register: (data: { email: string; password: string; firstName?: string; lastName?: string }) =>
@@ -352,6 +364,24 @@ export const reportsAPI = {
       companyName,
       additionalInfo,
     }),
+
+  // Parse CSV and normalize company names
+  parseCSVCompanies: async (file: File): Promise<ParseCSVResponse> => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await api.post<{ success: boolean; data: ParseCSVResponse }>(
+      '/reports/parse-csv-companies',
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      }
+    );
+
+    return response.data.data;
+  },
 
   // Get workflow sections
   getWorkflowSections: (workflowType: WorkflowType) =>

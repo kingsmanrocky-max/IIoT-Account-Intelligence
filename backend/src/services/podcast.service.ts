@@ -260,7 +260,7 @@ export class PodcastService {
       await prisma.podcastGeneration.update({
         where: { id: podcastId },
         data: {
-          script: script as unknown as Record<string, unknown>,
+          script: script as any,
           scriptTokens: script.metadata?.tokens || 0,
           scriptGeneratedAt: new Date(),
         },
@@ -281,7 +281,7 @@ export class PodcastService {
       await prisma.podcastGeneration.update({
         where: { id: podcastId },
         data: {
-          audioSegments: audioSegments as unknown as Record<string, unknown>[],
+          audioSegments: audioSegments as any,
           audioSegmentCount: audioSegments.length,
         },
       });
@@ -442,7 +442,15 @@ Important:
     // Parse the script
     try {
       // Try to extract JSON from the response
-      const jsonMatch = response.content.match(/\{[\s\S]*\}/);
+      // First, try to extract from markdown code fences
+      let jsonContent = response.content;
+      const codeBlockMatch = response.content.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (codeBlockMatch) {
+        jsonContent = codeBlockMatch[1].trim();
+      }
+
+      // Now extract the JSON object
+      const jsonMatch = jsonContent.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
         logger.error('No JSON found in GPT-4o response. First 500 chars:', response.content.substring(0, 500));
         throw new Error('No JSON found in response');

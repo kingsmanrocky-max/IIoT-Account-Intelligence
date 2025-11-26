@@ -235,6 +235,7 @@ export default function NewsDigestPage() {
               companies={companies}
               onCompaniesChange={setCompanies}
               placeholder="Type a company name and press Enter"
+              enableValidation={true}
             />
           </div>
         );

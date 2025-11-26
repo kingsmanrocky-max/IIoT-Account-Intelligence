@@ -2,6 +2,7 @@ import Fastify, { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
+import multipart from '@fastify/multipart';
 import { config } from './config/env';
 import { logger } from './utils/logger';
 import authRoutes from './routes/auth.routes';
@@ -51,6 +52,14 @@ export async function createApp(): Promise<FastifyInstance> {
     cache: 10000,
   });
 
+  // Register multipart for file uploads (CSV uploads)
+  await app.register(multipart, {
+    limits: {
+      fileSize: 1048576, // 1MB max file size for CSV uploads
+      files: 1, // Only 1 file at a time
+    },
+  });
+
   // Health check endpoint
   app.get('/health', async () => {
     return {
@@ -91,7 +100,7 @@ export async function createApp(): Promise<FastifyInstance> {
   });
 
   // Global error handler
-  app.setErrorHandler((error, request, reply) => {
+  app.setErrorHandler((error: any, request, reply) => {
     logger.error({
       error: error.message,
       stack: error.stack,

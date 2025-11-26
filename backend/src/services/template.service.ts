@@ -410,7 +410,7 @@ function compileTemplate(template: string, variables: TemplateVariables): string
 
   // Handle conditional blocks {{#if variable}}...{{/if}}
   const conditionalRegex = /\{\{#if\s+(\w+)\}\}([\s\S]*?)\{\{\/if\}\}/g;
-  compiled = compiled.replace(conditionalRegex, (match, variable, content) => {
+  compiled = compiled.replace(conditionalRegex, (_match, variable, content) => {
     const value = variables[variable];
     if (value && (typeof value !== 'object' || (Array.isArray(value) && value.length > 0))) {
       return content;
@@ -420,7 +420,7 @@ function compileTemplate(template: string, variables: TemplateVariables): string
 
   // Handle array iteration {{#each variable}}...{{/each}}
   const eachRegex = /\{\{#each\s+(\w+)\}\}([\s\S]*?)\{\{\/each\}\}/g;
-  compiled = compiled.replace(eachRegex, (match, variable, content) => {
+  compiled = compiled.replace(eachRegex, (_match, variable, content) => {
     const arr = variables[variable];
     if (Array.isArray(arr)) {
       return arr.map((item) => content.replace(/\{\{this\}\}/g, String(item))).join('\n');
@@ -430,7 +430,7 @@ function compileTemplate(template: string, variables: TemplateVariables): string
 
   // Handle simple variable replacement {{variable}}
   const variableRegex = /\{\{(\w+)\}\}/g;
-  compiled = compiled.replace(variableRegex, (match, variable) => {
+  compiled = compiled.replace(variableRegex, (_match, variable) => {
     const value = variables[variable];
     if (value === undefined || value === null) {
       return '';
@@ -532,7 +532,7 @@ export class TemplateService {
   listTemplates(workflowType?: WorkflowType): TemplateMetadata[] {
     const templates: TemplateMetadata[] = [];
 
-    for (const [key, template] of this.templates.entries()) {
+    for (const [_key, template] of this.templates.entries()) {
       if (!workflowType || template.workflowType === workflowType) {
         templates.push({
           id: template.id,
@@ -550,7 +550,7 @@ export class TemplateService {
     }
 
     // Add custom templates (may override defaults in the list)
-    for (const [key, template] of this.customTemplates.entries()) {
+    for (const [_key, template] of this.customTemplates.entries()) {
       if (!workflowType || template.workflowType === workflowType) {
         const existingIndex = templates.findIndex(
           (t) => t.workflowType === template.workflowType && t.section === template.section
@@ -584,7 +584,7 @@ export class TemplateService {
   getSectionsForWorkflow(workflowType: WorkflowType): ReportSection[] {
     const sections: ReportSection[] = [];
 
-    for (const [key, template] of this.templates.entries()) {
+    for (const [_key, template] of this.templates.entries()) {
       if (template.workflowType === workflowType && !sections.includes(template.section)) {
         sections.push(template.section);
       }

@@ -298,37 +298,21 @@ export async function podcastRoutes(app: FastifyInstance) {
   // Get podcast processor status
   app.get('/podcast/processor/status', {
     preHandler: adminMiddleware,
-    schema: {
-      description: 'Get podcast processor status (admin only)',
-      tags: ['Podcasts', 'Admin'],
-    },
   }, podcastController.getProcessorStatus.bind(podcastController));
 
   // Get podcast queue statistics
   app.get('/podcast/queue/stats', {
     preHandler: adminMiddleware,
-    schema: {
-      description: 'Get podcast queue statistics (admin only)',
-      tags: ['Podcasts', 'Admin'],
-    },
   }, podcastController.getQueueStats.bind(podcastController));
 
   // Test TTS connection
   app.get('/podcast/test/tts', {
     preHandler: adminMiddleware,
-    schema: {
-      description: 'Test TTS service connection (admin only)',
-      tags: ['Podcasts', 'Admin'],
-    },
   }, podcastController.testTTS.bind(podcastController));
 
   // Test FFmpeg availability
   app.get('/podcast/test/ffmpeg', {
     preHandler: adminMiddleware,
-    schema: {
-      description: 'Test FFmpeg availability (admin only)',
-      tags: ['Podcasts', 'Admin'],
-    },
   }, podcastController.testFFmpeg.bind(podcastController));
 }
 

@@ -175,14 +175,14 @@ export class PromptService {
       where: { id },
       data: {
         promptText: originalVersion.promptText,
-        parameters: originalVersion.parameters,
+        parameters: originalVersion.parameters as any,
         currentVersion: newVersion,
         updatedBy: userId,
         versions: {
           create: {
             version: newVersion,
             promptText: originalVersion.promptText,
-            parameters: originalVersion.parameters,
+            parameters: originalVersion.parameters as any,
             changeReason: 'Reset to default',
             changedBy: userId,
           },

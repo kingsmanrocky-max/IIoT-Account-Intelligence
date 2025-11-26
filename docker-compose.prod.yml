@@ -46,7 +46,7 @@ services:
       dockerfile: Dockerfile
     container_name: iiot-backend-prod
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      DATABASE_URL: postgresql://iiot_user:SecurePassword2025@postgres:5432/iiot_intelligence
       REDIS_URL: redis://redis:6379
       NODE_ENV: production
       PORT: 4001
@@ -83,10 +83,12 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api}
     container_name: iiot-frontend-prod
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api}
     ports:
       - "4000:4000"
     depends_on:

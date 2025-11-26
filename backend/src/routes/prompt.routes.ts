@@ -120,11 +120,6 @@ export async function promptRoutes(app: FastifyInstance) {
 
   // Get cache statistics
   app.get('/cache/stats', {
-    schema: {
-      description: 'Get prompt cache statistics (admin only)',
-      tags: ['Prompts'],
-      // Removed response schema to allow full data serialization
-    },
   }, promptController.getCacheStats.bind(promptController));
 
   // Invalidate cache

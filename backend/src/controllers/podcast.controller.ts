@@ -4,6 +4,7 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { PodcastTemplate, PodcastDuration } from '@prisma/client';
 import { getPodcastService } from '../services/podcast.service';
 import { getPodcastProcessor } from '../services/podcast-processor';
+import { getWebexDeliveryService } from '../services/webex-delivery.service';
 import logger from '../utils/logger';
 import * as fs from 'fs';
 
@@ -72,6 +73,7 @@ const DURATION_INFO = {
 export class PodcastController {
   private podcastService = getPodcastService();
   private processor = getPodcastProcessor();
+  private webexDeliveryService = getWebexDeliveryService();
 
   // Request podcast generation for a report
   async requestPodcast(
@@ -569,7 +571,7 @@ export class PodcastController {
     try {
       const { reportId } = request.params;
       const { destination, destinationType } = request.body;
-      const userId = (request.user as any).userId;
+      const userId = (request as any).user.userId;
 
       // Verify podcast exists and is completed
       const podcast = await this.podcastService.getPodcastByReportId(reportId);
@@ -595,7 +597,7 @@ export class PodcastController {
       }
 
       // Schedule delivery
-      const delivery = await webexDeliveryService.schedulePodcastDelivery(
+      const delivery = await this.webexDeliveryService.schedulePodcastDelivery(
         podcast.id,
         userId,
         { destination, destinationType }
@@ -637,7 +639,7 @@ export class PodcastController {
       }
 
       // Get deliveries
-      const deliveries = await webexDeliveryService.getPodcastDeliveries(podcast.id);
+      const deliveries = await this.webexDeliveryService.getPodcastDeliveries(podcast.id);
 
       return reply.status(200).send({
         success: true,
@@ -663,7 +665,7 @@ export class PodcastController {
       const { deliveryId } = request.params;
 
       // Retry delivery
-      const delivery = await webexDeliveryService.retryPodcastDelivery(deliveryId);
+      const delivery = await this.webexDeliveryService.retryPodcastDelivery(deliveryId);
 
       logger.info(`Podcast delivery retry initiated: ${deliveryId}`);
 

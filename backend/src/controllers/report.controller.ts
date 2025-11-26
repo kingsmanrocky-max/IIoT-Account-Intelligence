@@ -6,6 +6,7 @@ import { getReportService } from '../services/report.service';
 import { getLLMService } from '../services/llm.service';
 import { getExportService } from '../services/export.service';
 import { getWebexDeliveryService } from '../services/webex-delivery.service';
+import { csvService } from '../services/csv.service';
 import logger from '../utils/logger';
 
 interface CreateReportBody {
@@ -351,6 +352,54 @@ export class ReportController {
         error: {
           code: 'ENRICHMENT_FAILED',
           message: 'Failed to enrich company data',
+        },
+      });
+    }
+  }
+
+  // Parse CSV and normalize company names
+  async parseCSVCompanies(request: FastifyRequest, reply: FastifyReply) {
+    try {
+      // Get uploaded file
+      const data = await request.file();
+
+      if (!data) {
+        return reply.status(400).send({
+          success: false,
+          error: {
+            code: 'NO_FILE_UPLOADED',
+            message: 'No file was uploaded',
+          },
+        });
+      }
+
+      // Convert file stream to buffer
+      const fileBuffer = await data.toBuffer();
+      const fileName = data.filename;
+
+      // Parse CSV
+      const parseResult = await csvService.parseCompaniesFromCSV(fileBuffer, fileName);
+
+      // Normalize company names using LLM in batches
+      const normalizedCompanies = await this.llmService.normalizeCompanyBatch(parseResult.companies);
+
+      return reply.send({
+        success: true,
+        data: {
+          originalCount: parseResult.originalCount,
+          normalizedCompanies,
+        },
+      });
+    } catch (error) {
+      logger.error('Parse CSV companies error:', error);
+
+      const errorMessage = error instanceof Error ? error.message : 'Failed to parse CSV file';
+
+      return reply.status(400).send({
+        success: false,
+        error: {
+          code: 'CSV_PARSE_FAILED',
+          message: errorMessage,
         },
       });
     }

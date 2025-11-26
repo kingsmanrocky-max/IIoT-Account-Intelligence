@@ -177,7 +177,7 @@ export class AuthService {
 
     return jwt.sign(payload, config.jwtSecret, {
       expiresIn: config.jwtExpiration,
-    });
+    } as any);
   }
 
   /**

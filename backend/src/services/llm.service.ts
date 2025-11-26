@@ -559,6 +559,91 @@ Only include fields where you have reliable information. Return ONLY valid JSON,
     }
   }
 
+  /**
+   * Batch normalize company names (for CSV uploads)
+   * Processes multiple companies in a single LLM call for efficiency
+   */
+  async normalizeCompanyBatch(companies: string[]): Promise<Record<string, unknown>[]> {
+    if (companies.length === 0) {
+      return [];
+    }
+
+    // Batch companies into groups of 5-10 for optimal LLM processing
+    const BATCH_SIZE = 7;
+    const batches: string[][] = [];
+
+    for (let i = 0; i < companies.length; i += BATCH_SIZE) {
+      batches.push(companies.slice(i, i + BATCH_SIZE));
+    }
+
+    const allResults: Record<string, unknown>[] = [];
+
+    for (const batch of batches) {
+      const companyList = batch.map((c, i) => `${i + 1}. ${c}`).join('\n');
+
+      const prompt = `Validate and normalize the following company names. For each company, provide the official company name and your confidence level.
+
+Company names to normalize:
+${companyList}
+
+Return a JSON array with one object per company, in the same order, with this structure:
+[
+  {
+    "original": "original input name",
+    "normalized": "Official Company Name Inc.",
+    "confidence": 0.0-1.0,
+    "industry": "Primary industry (optional)",
+    "isValid": true/false
+  }
+]
+
+Return ONLY valid JSON, no additional text. If a company name is invalid or nonsensical, set isValid to false.`;
+
+      try {
+        const response = await this.complete({
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPTS.DATA_ENRICHMENT },
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0.2,
+          maxTokens: 1000,
+        });
+
+        const batchResults = JSON.parse(response.content);
+
+        if (Array.isArray(batchResults)) {
+          allResults.push(...batchResults);
+        } else {
+          // Fallback: create individual results
+          for (const company of batch) {
+            allResults.push({
+              original: company,
+              normalized: company,
+              confidence: 0.3,
+              isValid: true,
+              error: 'Batch parsing failed',
+            });
+          }
+        }
+      } catch (error) {
+        logger.error('Failed to normalize company batch', { error, batchSize: batch.length });
+
+        // Fallback: return original names with low confidence
+        for (const company of batch) {
+          allResults.push({
+            original: company,
+            normalized: company,
+            confidence: 0.3,
+            isValid: true,
+            error: 'Normalization failed',
+          });
+        }
+      }
+    }
+
+    return allResults;
+  }
+
   // Test provider connectivity
   async testConnection(provider?: LLMProvider): Promise<{ provider: LLMProvider; connected: boolean }[]> {
     const results: { provider: LLMProvider; connected: boolean }[] = [];
