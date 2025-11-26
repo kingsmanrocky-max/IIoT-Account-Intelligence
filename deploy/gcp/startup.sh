@@ -27,8 +27,7 @@ cd /opt/iiot-app
 
 # Clone repository
 echo "Cloning repository..."
-# TODO: Update with your GitHub username
-git clone https://github.com/YOUR_USERNAME/IIoT-Account-Intelligence.git .
+git clone https://github.com/kingsmanrocky-max/IIoT-Account-Intelligence.git .
 git checkout gcp-deployment
 
 # Retrieve environment variables from GCP metadata
