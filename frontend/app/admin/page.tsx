@@ -90,6 +90,7 @@ export default function AdminPage() {
         openaiApiKey: undefined,
         xaiApiKey: undefined,
         webexBotToken: undefined,
+        webexWebhookSecret: undefined,
       }));
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
@@ -367,7 +368,7 @@ export default function AdminPage() {
                   Webex Integration
                 </h2>
               </div>
-              <div className="p-6">
+              <div className="p-6 space-y-6">
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <label className="block text-sm font-medium text-meraki-gray-700">
@@ -411,6 +412,24 @@ export default function AdminPage() {
                       {testResults.webex.message}
                     </div>
                   )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-meraki-gray-700 mb-2">
+                    Webex Webhook Secret
+                  </label>
+                  <input
+                    type="password"
+                    value={formData.webexWebhookSecret || ''}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, webexWebhookSecret: e.target.value }))
+                    }
+                    placeholder={settings?.webexWebhookSecretMasked || 'Enter webhook secret for signature validation'}
+                    className="w-full px-4 py-2.5 border border-meraki-gray-300 rounded-lg text-meraki-gray-900 placeholder-meraki-gray-400 focus:outline-none focus:ring-2 focus:ring-meraki-blue focus:border-transparent"
+                  />
+                  <p className="mt-1.5 text-xs text-meraki-gray-500">
+                    Used to validate webhook signatures from Webex
+                  </p>
                 </div>
               </div>
             </div>

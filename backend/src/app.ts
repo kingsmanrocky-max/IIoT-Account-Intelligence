@@ -13,6 +13,7 @@ import { scheduleRoutes } from './routes/schedule.routes';
 import { analyticsRoutes } from './routes/analytics.routes';
 import { podcastRoutes } from './routes/podcast.routes';
 import { promptRoutes } from './routes/prompt.routes';
+import webhookRoutes from './routes/webhook.routes';
 
 export async function createApp(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -87,6 +88,7 @@ export async function createApp(): Promise<FastifyInstance> {
   await app.register(scheduleRoutes, { prefix: '/api/schedules' });
   await app.register(analyticsRoutes, { prefix: '/api/analytics' });
   await app.register(podcastRoutes, { prefix: '/api' }); // Podcast routes at /api level for /api/reports/:id/podcast
+  await app.register(webhookRoutes, { prefix: '/api/webhooks' });
 
   // 404 handler
   app.setNotFoundHandler((request, reply) => {

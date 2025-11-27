@@ -35,6 +35,7 @@ export const config = {
 
   // Webex
   webexBotToken: process.env.WEBEX_BOT_TOKEN,
+  webexWebhookSecret: process.env.WEBEX_WEBHOOK_SECRET,
 
   // File Storage
   storagePath: process.env.STORAGE_PATH || './storage/reports',

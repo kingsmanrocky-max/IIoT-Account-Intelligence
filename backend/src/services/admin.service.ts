@@ -16,6 +16,7 @@ export const CONFIG_KEYS = {
   OPENAI_API_KEY: 'openai_api_key',
   XAI_API_KEY: 'xai_api_key',
   WEBEX_BOT_TOKEN: 'webex_bot_token',
+  WEBEX_WEBHOOK_SECRET: 'webex_webhook_secret',
   REPORT_RETENTION_DAYS: 'report_retention_days',
 } as const;
 
@@ -24,6 +25,7 @@ const SENSITIVE_KEYS = [
   CONFIG_KEYS.OPENAI_API_KEY,
   CONFIG_KEYS.XAI_API_KEY,
   CONFIG_KEYS.WEBEX_BOT_TOKEN,
+  CONFIG_KEYS.WEBEX_WEBHOOK_SECRET,
 ];
 
 function encrypt(text: string): string {
@@ -60,6 +62,8 @@ export interface SystemSettings {
   xaiApiKeyMasked: string;
   webexBotToken: string;
   webexBotTokenMasked: string;
+  webexWebhookSecret: string;
+  webexWebhookSecretMasked: string;
   reportRetentionDays: number;
 }
 
@@ -85,6 +89,7 @@ export class AdminService {
     const openaiKey = getValue(CONFIG_KEYS.OPENAI_API_KEY, process.env.OPENAI_API_KEY || '');
     const xaiKey = getValue(CONFIG_KEYS.XAI_API_KEY, process.env.XAI_API_KEY || '');
     const webexToken = getValue(CONFIG_KEYS.WEBEX_BOT_TOKEN, process.env.WEBEX_BOT_TOKEN || '');
+    const webexWebhookSecret = getValue(CONFIG_KEYS.WEBEX_WEBHOOK_SECRET, process.env.WEBEX_WEBHOOK_SECRET || '');
 
     return {
       llmPrimaryProvider: getValue(CONFIG_KEYS.LLM_PRIMARY_PROVIDER, process.env.LLM_PRIMARY_PROVIDER || 'openai'),
@@ -95,12 +100,14 @@ export class AdminService {
       xaiApiKeyMasked: maskSensitiveValue(xaiKey),
       webexBotToken: webexToken,
       webexBotTokenMasked: maskSensitiveValue(webexToken),
+      webexWebhookSecret: webexWebhookSecret,
+      webexWebhookSecretMasked: maskSensitiveValue(webexWebhookSecret),
       reportRetentionDays: parseInt(getValue(CONFIG_KEYS.REPORT_RETENTION_DAYS, '90'), 10),
     };
   }
 
   // Get settings for display (masked sensitive values)
-  async getSettingsForDisplay(): Promise<Omit<SystemSettings, 'openaiApiKey' | 'xaiApiKey' | 'webexBotToken'>> {
+  async getSettingsForDisplay(): Promise<Omit<SystemSettings, 'openaiApiKey' | 'xaiApiKey' | 'webexBotToken' | 'webexWebhookSecret'>> {
     const settings = await this.getSettings();
     return {
       llmPrimaryProvider: settings.llmPrimaryProvider,
@@ -108,6 +115,7 @@ export class AdminService {
       openaiApiKeyMasked: settings.openaiApiKeyMasked,
       xaiApiKeyMasked: settings.xaiApiKeyMasked,
       webexBotTokenMasked: settings.webexBotTokenMasked,
+      webexWebhookSecretMasked: settings.webexWebhookSecretMasked,
       reportRetentionDays: settings.reportRetentionDays,
     };
   }
@@ -141,6 +149,7 @@ export class AdminService {
     openaiApiKey: string;
     xaiApiKey: string;
     webexBotToken: string;
+    webexWebhookSecret: string;
     reportRetentionDays: number;
   }>): Promise<void> {
     const updates: Promise<void>[] = [];
@@ -159,6 +168,9 @@ export class AdminService {
     }
     if (settings.webexBotToken !== undefined && settings.webexBotToken !== '') {
       updates.push(this.updateSetting(CONFIG_KEYS.WEBEX_BOT_TOKEN, settings.webexBotToken));
+    }
+    if (settings.webexWebhookSecret !== undefined && settings.webexWebhookSecret !== '') {
+      updates.push(this.updateSetting(CONFIG_KEYS.WEBEX_WEBHOOK_SECRET, settings.webexWebhookSecret));
     }
     if (settings.reportRetentionDays !== undefined) {
       updates.push(this.updateSetting(CONFIG_KEYS.REPORT_RETENTION_DAYS, settings.reportRetentionDays.toString()));
@@ -281,6 +293,7 @@ export class AdminService {
       [CONFIG_KEYS.OPENAI_API_KEY]: 'OpenAI API key',
       [CONFIG_KEYS.XAI_API_KEY]: 'X.ai API key',
       [CONFIG_KEYS.WEBEX_BOT_TOKEN]: 'Webex bot access token',
+      [CONFIG_KEYS.WEBEX_WEBHOOK_SECRET]: 'Webex webhook secret for signature validation',
       [CONFIG_KEYS.REPORT_RETENTION_DAYS]: 'Number of days to retain reports',
     };
     return descriptions[key] || key;

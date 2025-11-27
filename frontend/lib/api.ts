@@ -477,6 +477,7 @@ export interface SystemSettings {
   openaiApiKeyMasked: string;
   xaiApiKeyMasked: string;
   webexBotTokenMasked: string;
+  webexWebhookSecretMasked: string;
   reportRetentionDays: number;
 }
 
@@ -492,6 +493,7 @@ export interface UpdateSettingsInput {
   openaiApiKey?: string;
   xaiApiKey?: string;
   webexBotToken?: string;
+  webexWebhookSecret?: string;
   reportRetentionDays?: number;
 }
 
@@ -509,6 +511,14 @@ export interface TemplateConfiguration {
   newsDigestOptions?: NewsDigestOptions;
   delivery?: WebexDeliveryInput;
   requestedFormats?: ReportFormat[];
+  podcastOptions?: {
+    enabled: boolean;
+    template?: PodcastTemplate;
+    duration?: PodcastDuration;
+    deliveryEnabled?: boolean;
+    deliveryDestination?: string;
+    deliveryDestinationType?: WebexDestinationType;
+  };
 }
 
 export interface Template {
@@ -598,6 +608,8 @@ export interface Schedule {
   isActive: boolean;
   deliveryMethod: DeliveryMethod;
   deliveryDestination?: string;
+  targetCompanyName?: string;
+  targetCompanyNames?: string[];
   lastRunAt?: string;
   nextRunAt?: string;
   createdAt: string;
@@ -613,6 +625,8 @@ export interface CreateScheduleInput {
   isActive?: boolean;
   deliveryMethod: DeliveryMethod;
   deliveryDestination?: string;
+  targetCompanyName?: string;
+  targetCompanyNames?: string[];
 }
 
 export interface UpdateScheduleInput {
@@ -622,6 +636,8 @@ export interface UpdateScheduleInput {
   timezone?: string;
   deliveryMethod?: DeliveryMethod;
   deliveryDestination?: string;
+  targetCompanyName?: string;
+  targetCompanyNames?: string[];
 }
 
 export interface ListSchedulesParams {

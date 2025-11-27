@@ -1,0 +1,571 @@
+import { PrismaClient, User, WorkflowType } from '@prisma/client';
+import bcrypt from 'bcrypt';
+import crypto from 'crypto';
+import { getLLMService } from './llm.service';
+import { getReportService } from './report.service';
+import { getWebexDeliveryService } from './webex-delivery.service';
+import { getAdminService } from './admin.service';
+import { logger } from '../utils/logger';
+import { config } from '../config/env';
+import {
+  WebexWebhookPayload,
+  WebexWebhookMessageData,
+  WebexMessage,
+  ParsedReportRequest,
+  ParseResult,
+  isParsedRequest,
+  isParseError,
+} from '../types/webex-webhook.types';
+
+const prisma = new PrismaClient();
+
+/**
+ * Rate limiter for webhook requests
+ */
+class WebhookRateLimiter {
+  private requests: Map<string, number[]> = new Map();
+  private readonly maxRequests = 10;
+  private readonly windowMs = 60000; // 1 minute
+
+  isRateLimited(email: string): boolean {
+    const now = Date.now();
+    const key = email.toLowerCase();
+
+    let timestamps = this.requests.get(key) || [];
+
+    // Remove expired timestamps
+    timestamps = timestamps.filter(t => now - t < this.windowMs);
+
+    if (timestamps.length >= this.maxRequests) {
+      return true;
+    }
+
+    timestamps.push(now);
+    this.requests.set(key, timestamps);
+
+    return false;
+  }
+
+  getRemainingTime(email: string): number {
+    const now = Date.now();
+    const key = email.toLowerCase();
+    const timestamps = this.requests.get(key) || [];
+
+    if (timestamps.length === 0) return 0;
+
+    const oldestTimestamp = Math.min(...timestamps);
+    const remainingMs = this.windowMs - (now - oldestTimestamp);
+
+    return Math.max(0, Math.ceil(remainingMs / 1000)); // Return seconds
+  }
+}
+
+export class WebexWebhookService {
+  private rateLimiter = new WebhookRateLimiter();
+
+  /**
+   * Main entry point for processing webhook payloads
+   */
+  async processWebhook(payload: WebexWebhookPayload): Promise<void> {
+    // Only process message:created events
+    if (payload.resource !== 'messages' || payload.event !== 'created') {
+      logger.debug('Ignoring non-message webhook event', {
+        resource: payload.resource,
+        event: payload.event
+      });
+      return;
+    }
+
+    const messageData = payload.data;
+    const senderEmail = messageData.personEmail;
+
+    // Security: Cisco email check
+    if (!this.isCiscoEmail(senderEmail)) {
+      logger.warn('Non-Cisco email rejected', {
+        domain: senderEmail.split('@')[1]
+      });
+      await this.sendErrorReply(messageData,
+        'This service is only available for Cisco employees (@cisco.com).');
+      return;
+    }
+
+    // Security: Rate limiting
+    if (this.rateLimiter.isRateLimited(senderEmail)) {
+      const waitTime = this.rateLimiter.getRemainingTime(senderEmail);
+      logger.warn('Webhook rate limit exceeded', {
+        domain: senderEmail.split('@')[1]
+      });
+      await this.sendErrorReply(messageData,
+        `Rate limit exceeded. Please wait ${waitTime} seconds before trying again.`);
+      return;
+    }
+
+    // Fetch full message content (webhook only contains metadata)
+    const message = await this.fetchMessageContent(messageData.id);
+
+    if (!message || !message.text) {
+      logger.error('Failed to fetch message content', {
+        messageId: messageData.id
+      });
+      return;
+    }
+
+    // TODO: Filter out bot's own messages to prevent loops
+    // This requires knowing the bot's personId from Webex API
+
+    // Parse user request with LLM
+    const parsed = await this.parseUserRequest(message.text);
+
+    if (isParseError(parsed)) {
+      // Send clarification request
+      await this.sendClarificationRequest(messageData, parsed.error);
+      return;
+    }
+
+    // Validate parsed request
+    const validation = this.validateParsedRequest(parsed);
+    if (!validation.valid) {
+      await this.sendErrorReply(messageData,
+        `Invalid request: ${validation.errors.join(', ')}`);
+      return;
+    }
+
+    // Send confirmation message (best guess + confirm)
+    const confirmed = await this.sendConfirmation(messageData, parsed);
+    if (!confirmed) {
+      // User needs to confirm - we'll handle that in a future webhook event
+      // For now, just wait for user to reply "yes"
+      // TODO: Implement conversation state management for confirmation flow
+      logger.info('Waiting for user confirmation', {
+        personEmail: senderEmail,
+        parsedRequest: {
+          company: parsed.targetCompany,
+          workflowType: parsed.workflowType
+        }
+      });
+      return;
+    }
+
+    // Find or create user
+    const user = await this.findOrCreateCiscoUser(senderEmail);
+    if (!user) {
+      await this.sendErrorReply(messageData,
+        'Failed to process your request. Please try again later.');
+      return;
+    }
+
+    // Send acknowledgment
+    await this.sendAcknowledgment(messageData, parsed);
+
+    // Create report
+    await this.createReport(user, parsed, messageData);
+  }
+
+  /**
+   * Check if email is @cisco.com
+   */
+  private isCiscoEmail(email: string): boolean {
+    if (!email || typeof email !== 'string') {
+      return false;
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(normalizedEmail)) {
+      return false;
+    }
+
+    // Strict domain check - only exact @cisco.com match (no subdomains)
+    return normalizedEmail.endsWith('@cisco.com') &&
+           normalizedEmail.split('@').length === 2;
+  }
+
+  /**
+   * Fetch full message content from Webex API
+   */
+  private async fetchMessageContent(messageId: string): Promise<WebexMessage | null> {
+    const adminService = getAdminService();
+    const settings = await adminService.getSettings();
+
+    if (!settings.webexBotToken) {
+      logger.error('Webex bot token not configured');
+      return null;
+    }
+
+    try {
+      const response = await fetch(
+        `https://webexapis.com/v1/messages/${messageId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${settings.webexBotToken}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        logger.error('Failed to fetch Webex message', {
+          status: response.status,
+          statusText: response.statusText
+        });
+        return null;
+      }
+
+      const data = await response.json() as WebexMessage;
+      return data;
+    } catch (error) {
+      logger.error('Error fetching Webex message', {
+        error: error instanceof Error ? error.message : 'Unknown'
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Parse user request using LLM
+   */
+  private async parseUserRequest(message: string): Promise<ParseResult> {
+    const llmService = getLLMService();
+
+    const systemPrompt = `You are an intent parser for the IIoT Account Intelligence platform.
+Extract the following from the user's message:
+1. targetCompany (required)
+2. workflowType: ACCOUNT_INTELLIGENCE (default), COMPETITIVE_INTELLIGENCE, or NEWS_DIGEST
+3. additionalCompanies (for NEWS_DIGEST)
+4. depth: brief, standard, or detailed
+
+Return ONLY valid JSON matching this schema:
+{
+  "targetCompany": "string",
+  "workflowType": "ACCOUNT_INTELLIGENCE" | "COMPETITIVE_INTELLIGENCE" | "NEWS_DIGEST",
+  "additionalCompanies": ["string"] | null,
+  "depth": "brief" | "standard" | "detailed",
+  "confidence": 0.0-1.0
+}
+
+If you cannot extract a valid company name, return: {"error": "reason", "confidence": 0}
+
+Examples:
+- "Tell me about Microsoft" -> {"targetCompany": "Microsoft", "workflowType": "ACCOUNT_INTELLIGENCE", "additionalCompanies": null, "depth": "standard", "confidence": 0.95}
+- "Competitive analysis of Siemens" -> {"targetCompany": "Siemens", "workflowType": "COMPETITIVE_INTELLIGENCE", "additionalCompanies": null, "depth": "standard", "confidence": 0.90}
+- "Brief news digest for Apple, Google, Amazon" -> {"targetCompany": "Apple", "workflowType": "NEWS_DIGEST", "additionalCompanies": ["Google", "Amazon"], "depth": "brief", "confidence": 0.85}`;
+
+    try {
+      const response = await llmService.complete({
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: message }
+        ],
+        temperature: 0.1,
+        maxTokens: 300
+      });
+
+      const parsed = JSON.parse(response.content);
+
+      // Set default depth if not provided
+      if (isParsedRequest(parsed) && !parsed.depth) {
+        parsed.depth = 'standard';
+      }
+
+      return parsed;
+    } catch (error) {
+      logger.error('Failed to parse user request with LLM', {
+        error: error instanceof Error ? error.message : 'Unknown',
+        message: message.substring(0, 100) // Log first 100 chars only
+      });
+      return { error: 'Failed to understand your request', confidence: 0 };
+    }
+  }
+
+  /**
+   * Validate parsed request
+   */
+  private validateParsedRequest(parsed: ParsedReportRequest): { valid: boolean; errors: string[] } {
+    const errors: string[] = [];
+
+    if (!parsed.targetCompany || parsed.targetCompany.length < 2) {
+      errors.push('Company name is too short');
+    }
+    if (parsed.targetCompany && parsed.targetCompany.length > 200) {
+      errors.push('Company name is too long');
+    }
+
+    const validWorkflows: WorkflowType[] = ['ACCOUNT_INTELLIGENCE', 'COMPETITIVE_INTELLIGENCE', 'NEWS_DIGEST'];
+    if (!validWorkflows.includes(parsed.workflowType as WorkflowType)) {
+      errors.push('Invalid workflow type');
+    }
+
+    if (parsed.depth && !['brief', 'standard', 'detailed'].includes(parsed.depth)) {
+      errors.push('Invalid depth option');
+    }
+
+    return { valid: errors.length === 0, errors };
+  }
+
+  /**
+   * Find or create Cisco user
+   */
+  private async findOrCreateCiscoUser(email: string): Promise<User | null> {
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Check for existing user
+    let user = await prisma.user.findUnique({
+      where: { email: normalizedEmail }
+    });
+
+    if (user) {
+      if (!user.isActive) {
+        logger.warn('Inactive user attempted webhook access', {
+          userId: user.id
+        });
+        return null;
+      }
+      return user;
+    }
+
+    // Auto-create new Cisco user
+    try {
+      const randomPassword = crypto.randomBytes(32).toString('hex');
+      const passwordHash = await bcrypt.hash(randomPassword, 12);
+
+      user = await prisma.user.create({
+        data: {
+          email: normalizedEmail,
+          passwordHash,
+          role: 'USER',
+          isActive: true,
+          profile: {
+            create: {
+              timezone: 'UTC',
+              defaultLLMModel: 'gpt-4',
+            }
+          }
+        }
+      });
+
+      logger.info('Auto-created Cisco user via Webex webhook', {
+        userId: user.id,
+        email: normalizedEmail
+      });
+
+      // Send welcome message
+      await this.sendWelcomeMessage(normalizedEmail);
+
+      return user;
+    } catch (error) {
+      logger.error('Failed to auto-create user', {
+        error: error instanceof Error ? error.message : 'Unknown'
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Send confirmation message (best guess + confirm)
+   */
+  private async sendConfirmation(
+    messageData: WebexWebhookMessageData,
+    parsed: ParsedReportRequest
+  ): Promise<boolean> {
+    const webexService = getWebexDeliveryService();
+
+    const workflowLabels: Record<string, string> = {
+      ACCOUNT_INTELLIGENCE: 'Account Intelligence',
+      COMPETITIVE_INTELLIGENCE: 'Competitive Intelligence',
+      NEWS_DIGEST: 'News Digest'
+    };
+
+    const workflowLabel = workflowLabels[parsed.workflowType] || parsed.workflowType;
+
+    let message = `I'll generate an **${workflowLabel}** report for **${parsed.targetCompany}**.`;
+
+    if (parsed.additionalCompanies && parsed.additionalCompanies.length > 0) {
+      message += `\n\nIncluding: ${parsed.additionalCompanies.join(', ')}`;
+    }
+
+    message += `\n\nDoes this look right? Reply "yes" to proceed or tell me what to change.`;
+
+    const destination = messageData.roomType === 'direct'
+      ? messageData.personEmail
+      : messageData.roomId;
+    const destinationType = messageData.roomType === 'direct' ? 'email' : 'roomId';
+
+    try {
+      await webexService.sendWebexMessage(destination, message, destinationType);
+
+      // For MVP, assume user will confirm (we'll handle "yes" in a future iteration)
+      // TODO: Implement conversation state management
+      return true; // Simulate confirmation for now
+    } catch (error) {
+      logger.error('Failed to send confirmation', {
+        error: error instanceof Error ? error.message : 'Unknown'
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Send acknowledgment message
+   */
+  private async sendAcknowledgment(
+    messageData: WebexWebhookMessageData,
+    parsed: ParsedReportRequest
+  ): Promise<void> {
+    const webexService = getWebexDeliveryService();
+
+    const workflowLabels: Record<string, string> = {
+      ACCOUNT_INTELLIGENCE: 'Account Intelligence',
+      COMPETITIVE_INTELLIGENCE: 'Competitive Intelligence',
+      NEWS_DIGEST: 'News Digest'
+    };
+
+    const workflowLabel = workflowLabels[parsed.workflowType] || parsed.workflowType;
+
+    const message = `**Got it!** Generating your ${workflowLabel} report now. I'll send it when ready (2-3 minutes).`;
+
+    const destination = messageData.roomType === 'direct'
+      ? messageData.personEmail
+      : messageData.roomId;
+    const destinationType = messageData.roomType === 'direct' ? 'email' : 'roomId';
+
+    try {
+      await webexService.sendWebexMessage(destination, message, destinationType);
+    } catch (error) {
+      logger.error('Failed to send acknowledgment', {
+        error: error instanceof Error ? error.message : 'Unknown'
+      });
+    }
+  }
+
+  /**
+   * Send error reply
+   */
+  private async sendErrorReply(
+    messageData: WebexWebhookMessageData,
+    errorMessage: string
+  ): Promise<void> {
+    const webexService = getWebexDeliveryService();
+
+    const destination = messageData.roomType === 'direct'
+      ? messageData.personEmail
+      : messageData.roomId;
+    const destinationType = messageData.roomType === 'direct' ? 'email' : 'roomId';
+
+    try {
+      await webexService.sendWebexMessage(destination, errorMessage, destinationType);
+    } catch (error) {
+      logger.error('Failed to send error reply', {
+        error: error instanceof Error ? error.message : 'Unknown'
+      });
+    }
+  }
+
+  /**
+   * Send clarification request
+   */
+  private async sendClarificationRequest(
+    messageData: WebexWebhookMessageData,
+    errorReason: string
+  ): Promise<void> {
+    const message = `I'd be happy to help! ${errorReason}
+
+Try something like:
+- "Account report for Microsoft"
+- "Competitive analysis of Siemens"
+- "News digest for Apple, Google, Amazon"`;
+
+    await this.sendErrorReply(messageData, message);
+  }
+
+  /**
+   * Send welcome message to new user
+   */
+  private async sendWelcomeMessage(email: string): Promise<void> {
+    const webexService = getWebexDeliveryService();
+
+    const frontendUrl = config.frontendUrl || 'http://localhost:4000';
+
+    const message = `**Welcome to IIoT Account Intelligence!**
+
+I've created an account for you using your Cisco email.
+
+You can now:
+- Request reports by @mentioning me in any Webex space
+- View your reports at: ${frontendUrl}/dashboard
+
+Your first report is being generated now!`;
+
+    try {
+      await webexService.sendWebexMessage(email, message, 'email');
+    } catch (error) {
+      logger.error('Failed to send welcome message', {
+        error: error instanceof Error ? error.message : 'Unknown'
+      });
+    }
+  }
+
+  /**
+   * Create report
+   */
+  private async createReport(
+    user: User,
+    parsed: ParsedReportRequest,
+    messageData: WebexWebhookMessageData
+  ): Promise<void> {
+    const reportService = getReportService();
+
+    const workflowLabels: Record<string, string> = {
+      ACCOUNT_INTELLIGENCE: 'Account Intelligence',
+      COMPETITIVE_INTELLIGENCE: 'Competitive Intelligence',
+      NEWS_DIGEST: 'News Digest'
+    };
+
+    const workflowLabel = workflowLabels[parsed.workflowType] || parsed.workflowType;
+
+    try {
+      const report = await reportService.createReport({
+        userId: user.id,
+        title: `${parsed.targetCompany} - ${workflowLabel}`,
+        workflowType: parsed.workflowType as WorkflowType,
+        inputData: {
+          companyName: parsed.targetCompany,
+          companyNames: parsed.additionalCompanies,
+        },
+        depth: parsed.depth || 'standard',
+        delivery: {
+          method: 'WEBEX',
+          destination: messageData.roomType === 'direct'
+            ? messageData.personEmail
+            : messageData.roomId,
+          destinationType: messageData.roomType === 'direct' ? 'email' : 'roomId',
+          contentType: 'SUMMARY_LINK',
+        }
+      });
+
+      logger.info('Report created from Webex webhook', {
+        reportId: report.id,
+        workflowType: parsed.workflowType,
+        userId: user.id
+      });
+    } catch (error) {
+      logger.error('Failed to create report from webhook', {
+        error: error instanceof Error ? error.message : 'Unknown'
+      });
+      await this.sendErrorReply(messageData,
+        'Failed to create your report. Please try again later.');
+    }
+  }
+}
+
+// Singleton instance
+let webhookServiceInstance: WebexWebhookService | null = null;
+
+export function getWebexWebhookService(): WebexWebhookService {
+  if (!webhookServiceInstance) {
+    webhookServiceInstance = new WebexWebhookService();
+  }
+  return webhookServiceInstance;
+}
+
+export default WebexWebhookService;
