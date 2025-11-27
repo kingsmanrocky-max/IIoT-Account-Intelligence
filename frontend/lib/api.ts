@@ -365,6 +365,16 @@ export const reportsAPI = {
       additionalInfo,
     }),
 
+  // Generate report title
+  generateTitle: async (workflowType: WorkflowType, companyName: string, additionalCompanies?: string[]): Promise<string> => {
+    const response = await api.post<{ success: boolean; data: { title: string } }>('/reports/generate-title', {
+      workflowType,
+      companyName,
+      additionalCompanies,
+    });
+    return response.data.data.title;
+  },
+
   // Parse CSV and normalize company names
   parseCSVCompanies: async (file: File): Promise<ParseCSVResponse> => {
     const formData = new FormData();

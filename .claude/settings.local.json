@@ -80,7 +80,14 @@
       "Bash(docker logs:*)",
       "Bash(timeout /t 5 /nobreak)",
       "Bash(docker exec:*)",
-      "Bash(docker ps:*)"
+      "Bash(docker ps:*)",
+      "Bash(git push:*)",
+      "Bash(gcloud compute ssh:*)",
+      "Bash(timeout /t 45)",
+      "Bash(timeout /t 10)",
+      "Bash(docker compose:*)",
+      "WebFetch(domain:docs.x.ai)",
+      "WebFetch(domain:platform.openai.com)"
     ],
     "deny": [],
     "ask": []

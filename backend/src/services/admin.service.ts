@@ -259,6 +259,7 @@ export class AdminService {
           { id: 'gpt-4o', name: 'GPT-4o' },
           { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
           { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' },
+          { id: 'gpt-5.1', name: 'GPT-5.1' },
         ],
       },
       {
@@ -267,6 +268,7 @@ export class AdminService {
         models: [
           { id: 'grok-2-latest', name: 'Grok 2' },
           { id: 'grok-beta', name: 'Grok Beta' },
+          { id: 'grok-4-fast-reasoning', name: 'Grok 4 Fast' },
         ],
       },
     ];

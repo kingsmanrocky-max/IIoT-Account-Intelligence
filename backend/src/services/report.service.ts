@@ -481,6 +481,15 @@ export class ReportService {
   getWorkflowSectionKeys(workflowType: WorkflowType): ReportSection[] {
     return WORKFLOW_SECTIONS[workflowType] || [];
   }
+
+  // Generate report title using LLM
+  async generateReportTitle(
+    workflowType: 'ACCOUNT_INTELLIGENCE' | 'COMPETITIVE_INTELLIGENCE' | 'NEWS_DIGEST',
+    companyName: string,
+    additionalContext?: string[]
+  ): Promise<string> {
+    return this.llmService.generateReportTitle(workflowType, companyName, additionalContext);
+  }
 }
 
 // Singleton instance

@@ -8,7 +8,7 @@ import { PodcastOptionsPanel } from '@/components/podcast';
 import { reportsAPI, Report, CreateReportInput, ReportFormat, DepthPreference, NewsDigestOptions, WebexDeliveryInput, PodcastOptions } from '@/lib/api';
 import { DEFAULT_TIME_PERIOD, DEFAULT_OUTPUT_STYLE } from '@/lib/constants/news-digest';
 import { WebexDeliveryOptions, DEFAULT_WEBEX_DELIVERY, validateWebexDestination } from '@/lib/constants/webex-delivery';
-import { ArrowRight, ArrowLeft, Newspaper, Check, Sparkles, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowRight, ArrowLeft, Newspaper, Check, Sparkles, RefreshCw, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 
 type Step = 'companies' | 'options' | 'generate';
 
@@ -38,6 +38,7 @@ export default function NewsDigestPage() {
     duration: 'STANDARD',
   });
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Reports state
@@ -88,17 +89,35 @@ export default function NewsDigestPage() {
     return () => clearInterval(interval);
   }, [reports, loadReports]);
 
-  // Auto-generate title when first company is added
+  // Auto-generate title when companies are entered (using LLM)
   useEffect(() => {
-    if (companies.length > 0 && !title) {
-      const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      if (companies.length === 1) {
-        setTitle(`News Digest - ${companies[0]} - ${dateStr}`);
-      } else {
-        setTitle(`News Digest - ${companies.length} Companies - ${dateStr}`);
+    const generateTitle = async () => {
+      if (companies.length > 0) {
+        setIsGeneratingTitle(true);
+        try {
+          const generatedTitle = await reportsAPI.generateTitle(
+            'NEWS_DIGEST',
+            companies[0],
+            companies.length > 1 ? companies.slice(1) : undefined
+          );
+          setTitle(generatedTitle);
+        } catch (error) {
+          // Fallback to static pattern if LLM fails
+          const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          if (companies.length === 1) {
+            setTitle(`News Digest - ${companies[0]} - ${dateStr}`);
+          } else {
+            setTitle(`News Digest - ${companies.length} Companies - ${dateStr}`);
+          }
+        } finally {
+          setIsGeneratingTitle(false);
+        }
       }
-    }
-  }, [companies, title]);
+    };
+
+    const debounceTimer = setTimeout(generateTitle, 500);  // Debounce to avoid too many API calls
+    return () => clearTimeout(debounceTimer);
+  }, [companies]);
 
   const currentStepIndex = STEPS.findIndex((s) => s.key === currentStep);
 
@@ -230,14 +249,25 @@ export default function NewsDigestPage() {
               <label htmlFor="title" className="block text-sm font-medium text-meraki-gray-700 mb-2">
                 Report Title
               </label>
-              <input
-                type="text"
-                id="title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g., Weekly Tech Giants News Digest"
-                className="w-full px-4 py-3 border border-meraki-gray-300 rounded-lg text-meraki-gray-900 placeholder-meraki-gray-400 focus:outline-none focus:ring-2 focus:ring-meraki-blue focus:border-transparent"
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  id="title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="e.g., Weekly Tech Giants News Digest"
+                  className={`w-full px-4 py-3 border border-meraki-gray-300 rounded-lg text-meraki-gray-900 placeholder-meraki-gray-400 focus:outline-none focus:ring-2 focus:ring-meraki-blue focus:border-transparent ${isGeneratingTitle ? 'animate-pulse' : ''}`}
+                  disabled={isGenerating || isGeneratingTitle}
+                />
+                {isGeneratingTitle && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <Loader2 className="h-5 w-5 text-meraki-blue animate-spin" />
+                  </div>
+                )}
+              </div>
+              {isGeneratingTitle && (
+                <p className="mt-1 text-sm text-meraki-gray-500">Generating title...</p>
+              )}
             </div>
 
             <CompanyTagInput

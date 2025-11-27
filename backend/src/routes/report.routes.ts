@@ -243,6 +243,23 @@ export async function reportRoutes(app: FastifyInstance) {
     },
   }, reportController.enrichCompany.bind(reportController));
 
+  // Generate report title
+  app.post('/generate-title', {
+    schema: {
+      description: 'Generate an engaging report title using LLM',
+      tags: ['Reports'],
+      body: {
+        type: 'object',
+        required: ['workflowType', 'companyName'],
+        properties: {
+          workflowType: { type: 'string', enum: ['ACCOUNT_INTELLIGENCE', 'COMPETITIVE_INTELLIGENCE', 'NEWS_DIGEST'] },
+          companyName: { type: 'string', minLength: 1 },
+          additionalCompanies: { type: 'array', items: { type: 'string' } },
+        },
+      },
+    },
+  }, reportController.generateTitle.bind(reportController));
+
   // Parse CSV and normalize company names
   app.post('/parse-csv-companies', reportController.parseCSVCompanies.bind(reportController));
 

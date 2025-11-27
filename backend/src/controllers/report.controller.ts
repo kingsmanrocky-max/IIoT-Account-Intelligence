@@ -357,6 +357,46 @@ export class ReportController {
     }
   }
 
+  // Generate report title
+  async generateTitle(
+    request: FastifyRequest<{ Body: { workflowType: string; companyName: string; additionalCompanies?: string[] } }>,
+    reply: FastifyReply
+  ) {
+    try {
+      const { workflowType, companyName, additionalCompanies } = request.body;
+
+      if (!companyName || !workflowType) {
+        return reply.status(400).send({
+          success: false,
+          error: {
+            code: 'MISSING_PARAMETERS',
+            message: 'Company name and workflow type are required',
+          },
+        });
+      }
+
+      const title = await this.reportService.generateReportTitle(
+        workflowType as 'ACCOUNT_INTELLIGENCE' | 'COMPETITIVE_INTELLIGENCE' | 'NEWS_DIGEST',
+        companyName,
+        additionalCompanies
+      );
+
+      return reply.send({
+        success: true,
+        data: { title },
+      });
+    } catch (error) {
+      logger.error('Generate title error:', error);
+      return reply.status(500).send({
+        success: false,
+        error: {
+          code: 'TITLE_GENERATION_FAILED',
+          message: 'Failed to generate report title',
+        },
+      });
+    }
+  }
+
   // Parse CSV and normalize company names
   async parseCSVCompanies(request: FastifyRequest, reply: FastifyReply) {
     try {

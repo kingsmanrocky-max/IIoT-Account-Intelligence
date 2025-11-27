@@ -25,6 +25,7 @@ export default function AccountIntelligencePage() {
     duration: 'STANDARD',
   });
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showOptions, setShowOptions] = useState(false);
 
@@ -80,13 +81,27 @@ export default function AccountIntelligencePage() {
     return () => clearInterval(interval);
   }, [reports, loadReports]);
 
-  // Auto-generate title when company name is entered
+  // Auto-generate title when company name is entered (using LLM)
   useEffect(() => {
-    if (companyName.trim() && !title) {
-      const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-      setTitle(`Account Intelligence - ${companyName.trim()} - ${dateStr}`);
-    }
-  }, [companyName, title]);
+    const generateTitle = async () => {
+      if (companyName && companyName.trim().length > 2) {
+        setIsGeneratingTitle(true);
+        try {
+          const generatedTitle = await reportsAPI.generateTitle('ACCOUNT_INTELLIGENCE', companyName.trim());
+          setTitle(generatedTitle);
+        } catch (error) {
+          // Fallback to static pattern if LLM fails
+          const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          setTitle(`Account Intelligence - ${companyName.trim()} - ${dateStr}`);
+        } finally {
+          setIsGeneratingTitle(false);
+        }
+      }
+    };
+
+    const debounceTimer = setTimeout(generateTitle, 500);  // Debounce to avoid too many API calls
+    return () => clearTimeout(debounceTimer);
+  }, [companyName]);
 
   const toggleFormat = (format: ReportFormat) => {
     setRequestedFormats((prev) =>
@@ -245,22 +260,6 @@ export default function AccountIntelligencePage() {
                     </div>
                   )}
 
-                  {/* Report Title */}
-                  <div>
-                    <label htmlFor="title" className="block text-sm font-medium text-meraki-gray-700 mb-2">
-                      Report Title
-                    </label>
-                    <input
-                      type="text"
-                      id="title"
-                      value={title}
-                      onChange={(e) => setTitle(e.target.value)}
-                      placeholder="e.g., Account Intelligence - Acme Corp"
-                      className="w-full px-4 py-3 border border-meraki-gray-300 rounded-lg text-meraki-gray-900 placeholder-meraki-gray-400 focus:outline-none focus:ring-2 focus:ring-meraki-blue focus:border-transparent"
-                      disabled={isGenerating}
-                    />
-                  </div>
-
                   {/* Company Name */}
                   <div>
                     <label htmlFor="company" className="block text-sm font-medium text-meraki-gray-700 mb-2">
@@ -378,6 +377,32 @@ export default function AccountIntelligencePage() {
                     <p className="mt-2 text-xs text-meraki-gray-400">
                       Enter company name and click Validate for AI-powered normalization
                     </p>
+                  </div>
+
+                  {/* Report Title */}
+                  <div>
+                    <label htmlFor="title" className="block text-sm font-medium text-meraki-gray-700 mb-2">
+                      Report Title
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        id="title"
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                        placeholder="e.g., Account Intelligence - Acme Corp"
+                        className={`w-full px-4 py-3 border border-meraki-gray-300 rounded-lg text-meraki-gray-900 placeholder-meraki-gray-400 focus:outline-none focus:ring-2 focus:ring-meraki-blue focus:border-transparent ${isGeneratingTitle ? 'animate-pulse' : ''}`}
+                        disabled={isGenerating || isGeneratingTitle}
+                      />
+                      {isGeneratingTitle && (
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                          <Loader2 className="h-5 w-5 text-meraki-blue animate-spin" />
+                        </div>
+                      )}
+                    </div>
+                    {isGeneratingTitle && (
+                      <p className="mt-1 text-sm text-meraki-gray-500">Generating title...</p>
+                    )}
                   </div>
 
                   {/* Collapsible Options */}

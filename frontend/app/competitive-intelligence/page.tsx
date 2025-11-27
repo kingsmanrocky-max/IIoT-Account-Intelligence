@@ -7,7 +7,8 @@ import { ReportCard, ReportViewer, SectionSelector, DepthSelector, ProductSelect
 import { PodcastOptionsPanel } from '@/components/podcast';
 import { reportsAPI, Report, CreateReportInput, ReportFormat, DepthPreference, CompetitiveIntelligenceOptions, WebexDeliveryInput, PodcastOptions } from '@/lib/api';
 import { WebexDeliveryOptions, DEFAULT_WEBEX_DELIVERY, validateWebexDestination } from '@/lib/constants/webex-delivery';
-import { ArrowRight, ArrowLeft, Target, Check, Sparkles, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowRight, ArrowLeft, Target, Check, Sparkles, RefreshCw, ChevronDown, ChevronUp, Loader2, X } from 'lucide-react';
+import { ValidatedCompany } from '@/lib/types/company-validation';
 
 type Step = 'competitor' | 'products' | 'industry' | 'advanced' | 'generate';
 
@@ -38,7 +39,12 @@ export default function CompetitiveIntelligencePage() {
     duration: 'STANDARD',
   });
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Validation state
+  const [isValidating, setIsValidating] = useState(false);
+  const [validationResult, setValidationResult] = useState<ValidatedCompany | null>(null);
 
   // Reports state
   const [reports, setReports] = useState<Report[]>([]);
@@ -88,12 +94,26 @@ export default function CompetitiveIntelligencePage() {
     return () => clearInterval(interval);
   }, [reports, loadReports]);
 
-  // Auto-generate title when company name changes
+  // Auto-generate title when company name is entered (using LLM)
   useEffect(() => {
-    if (companyName.trim() && !title) {
-      setTitle(`Competitive Analysis - ${companyName.trim()}`);
-    }
-  }, [companyName, title]);
+    const generateTitle = async () => {
+      if (companyName && companyName.trim().length > 2) {
+        setIsGeneratingTitle(true);
+        try {
+          const generatedTitle = await reportsAPI.generateTitle('COMPETITIVE_INTELLIGENCE', companyName.trim());
+          setTitle(generatedTitle);
+        } catch (error) {
+          // Fallback to static pattern if LLM fails
+          setTitle(`Competitive Analysis - ${companyName.trim()}`);
+        } finally {
+          setIsGeneratingTitle(false);
+        }
+      }
+    };
+
+    const debounceTimer = setTimeout(generateTitle, 500);  // Debounce to avoid too many API calls
+    return () => clearTimeout(debounceTimer);
+  }, [companyName]);
 
   const currentStepIndex = STEPS.findIndex((s) => s.key === currentStep);
 
@@ -193,6 +213,7 @@ export default function CompetitiveIntelligencePage() {
       // Reset form
       setTitle('');
       setCompanyName('');
+      setValidationResult(null);
       setSelectedProducts([]);
       setFocusIndustry(null);
       setSelectedSections([]);
@@ -242,6 +263,48 @@ export default function CompetitiveIntelligencePage() {
     }
   };
 
+  const handleValidateCompany = async () => {
+    if (!companyName.trim()) return;
+
+    setIsValidating(true);
+    setValidationResult(null);
+    setError(null);
+
+    try {
+      const response = await reportsAPI.enrichCompany(companyName.trim());
+      const enrichedData = response.data.data;
+
+      setValidationResult({
+        originalName: companyName,
+        validatedName: enrichedData.validatedName,
+        status: 'validated',
+        enrichedData,
+        isAccepted: false,
+      });
+    } catch (err) {
+      console.error('Failed to validate company:', err);
+      setValidationResult({
+        originalName: companyName,
+        status: 'error',
+        isAccepted: false,
+        errorMessage: 'Failed to validate company name',
+      });
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  const handleAcceptValidation = () => {
+    if (validationResult?.validatedName) {
+      setCompanyName(validationResult.validatedName);
+      setValidationResult({ ...validationResult, isAccepted: true });
+    }
+  };
+
+  const handleDismissValidation = () => {
+    setValidationResult(null);
+  };
+
   const renderStepContent = () => {
     switch (currentStep) {
       case 'competitor':
@@ -251,17 +314,117 @@ export default function CompetitiveIntelligencePage() {
               <label htmlFor="companyName" className="block text-sm font-medium text-meraki-gray-700 mb-2">
                 Competitor Company Name
               </label>
-              <input
-                type="text"
-                id="companyName"
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-                placeholder="e.g., Siemens, Rockwell Automation, Honeywell"
-                className="w-full px-4 py-3 border border-meraki-gray-300 rounded-lg text-meraki-gray-900 placeholder-meraki-gray-400 focus:outline-none focus:ring-2 focus:ring-meraki-blue focus:border-transparent text-lg"
-                autoFocus
-              />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  id="companyName"
+                  value={companyName}
+                  onChange={(e) => {
+                    setCompanyName(e.target.value);
+                    setValidationResult(null);
+                  }}
+                  placeholder="e.g., Siemens, Rockwell Automation, Honeywell"
+                  className="flex-1 px-4 py-3 border border-meraki-gray-300 rounded-lg text-meraki-gray-900 placeholder-meraki-gray-400 focus:outline-none focus:ring-2 focus:ring-meraki-blue focus:border-transparent text-lg"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={handleValidateCompany}
+                  disabled={isGenerating || isValidating || !companyName.trim()}
+                  className="flex items-center gap-2 px-4 py-3 bg-meraki-blue/10 text-meraki-blue hover:bg-meraki-blue/20 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isValidating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Validating...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      Validate
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Validation Result Card */}
+              {validationResult && validationResult.status === 'validated' && !validationResult.isAccepted && (
+                <div className="mt-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-amber-900 mb-1">
+                        Validated Company Name
+                      </p>
+                      <p className="text-sm text-amber-800">
+                        <span className="line-through opacity-60">{validationResult.originalName}</span>
+                        {' → '}
+                        <span className="font-semibold">{validationResult.validatedName}</span>
+                      </p>
+                      {validationResult.enrichedData && (
+                        <div className="mt-2 space-y-1">
+                          {validationResult.enrichedData.industry && (
+                            <p className="text-xs text-amber-700">
+                              <span className="font-medium">Industry:</span> {validationResult.enrichedData.industry}
+                            </p>
+                          )}
+                          {validationResult.enrichedData.headquarters && (
+                            <p className="text-xs text-amber-700">
+                              <span className="font-medium">HQ:</span> {validationResult.enrichedData.headquarters}
+                            </p>
+                          )}
+                          {validationResult.enrichedData.confidence && (
+                            <p className="text-xs text-amber-700">
+                              <span className="font-medium">Confidence:</span> {Math.round(validationResult.enrichedData.confidence * 100)}%
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={handleAcceptValidation}
+                        className="p-2 bg-green-100 hover:bg-green-200 text-green-700 rounded-lg transition-colors"
+                        title="Accept validated name"
+                      >
+                        <Check className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDismissValidation}
+                        className="p-2 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded-lg transition-colors"
+                        title="Dismiss"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Error Card */}
+              {validationResult && validationResult.status === 'error' && (
+                <div className="mt-3 p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-red-900 mb-1">Validation Failed</p>
+                      <p className="text-sm text-red-800">
+                        {validationResult.errorMessage || 'Failed to validate company name'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleDismissValidation}
+                      className="p-2 hover:bg-red-100 text-red-700 rounded-lg transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <p className="mt-2 text-sm text-meraki-gray-500">
-                Enter the official name of the competitor you want to analyze
+                Enter company name and click Validate for AI-powered normalization
               </p>
             </div>
 
@@ -269,14 +432,25 @@ export default function CompetitiveIntelligencePage() {
               <label htmlFor="title" className="block text-sm font-medium text-meraki-gray-700 mb-2">
                 Report Title
               </label>
-              <input
-                type="text"
-                id="title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g., Q4 Competitive Analysis - Siemens"
-                className="w-full px-4 py-3 border border-meraki-gray-300 rounded-lg text-meraki-gray-900 placeholder-meraki-gray-400 focus:outline-none focus:ring-2 focus:ring-meraki-blue focus:border-transparent"
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  id="title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="e.g., Q4 Competitive Analysis - Siemens"
+                  className={`w-full px-4 py-3 border border-meraki-gray-300 rounded-lg text-meraki-gray-900 placeholder-meraki-gray-400 focus:outline-none focus:ring-2 focus:ring-meraki-blue focus:border-transparent ${isGeneratingTitle ? 'animate-pulse' : ''}`}
+                  disabled={isGenerating || isGeneratingTitle}
+                />
+                {isGeneratingTitle && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <Loader2 className="h-5 w-5 text-meraki-blue animate-spin" />
+                  </div>
+                )}
+              </div>
+              {isGeneratingTitle && (
+                <p className="mt-1 text-sm text-meraki-gray-500">Generating title...</p>
+              )}
             </div>
           </div>
         );

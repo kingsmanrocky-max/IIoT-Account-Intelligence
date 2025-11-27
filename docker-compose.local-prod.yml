@@ -1,0 +1,59 @@
+include:
+  - docker-compose.local.yml
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: iiot-backend-local-prod
+    env_file:
+      - ./backend/.env
+    environment:
+      NODE_ENV: production
+      PORT: 4001
+    ports:
+      - "4001:4001"
+    volumes:
+      - backend_local_storage:/app/storage
+      - backend_local_logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - iiot-local-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost/api
+    container_name: iiot-frontend-local-prod
+    environment:
+      NODE_ENV: production
+    ports:
+      - "4000:4000"
+    depends_on:
+      - backend
+    networks:
+      - iiot-local-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: iiot-nginx-local
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.local.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - iiot-local-network
+
+volumes:
+  backend_local_storage:
+  backend_local_logs:

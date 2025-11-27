@@ -31,40 +31,65 @@ const PODCAST_SYSTEM_PROMPTS: Record<PodcastTemplate, string> = {
 - Marcus (analyst): Industry expert who provides deep insights and market context
 
 Create a conversational but professional dialogue that:
-- Opens with a compelling hook about the company/topic
-- Delivers key insights in an engaging, conversational format
+- Opens with a compelling hook about the company/topic and why it matters strategically
+- Explores market position, competitive dynamics, and industry trends
+- Analyzes strategic implications, risks, and opportunities
+- Discusses what this means for business leaders and decision-makers
 - Uses natural transitions and follow-up questions
-- Concludes with actionable takeaways for business leaders
+- Concludes with actionable strategic takeaways
 
-The tone should be authoritative yet accessible, like a high-quality business podcast.`,
+CONTENT FOCUS:
+- Strategic market positioning and competitive landscape
+- Industry trends affecting this company/sector
+- Risk factors and growth opportunities
+- Implications for partnerships, investments, or market strategy
+- Forward-looking analysis and predictions
+
+The tone should be authoritative yet accessible, like a high-quality business strategy podcast.`,
 
   STRATEGIC_DEBATE: `You are a podcast script writer creating a strategic debate podcast with three hosts:
-- Jordan (moderator): Neutral, balanced host who guides the discussion
-- Morgan (strategist): Bold, forward-thinking strategic advisor
-- Taylor (analyst): Data-driven market analyst who provides grounded perspectives
+- Jordan (moderator): Neutral, balanced host who poses challenging strategic questions
+- Morgan (strategist): Bold, forward-thinking advisor who champions growth and opportunity
+- Taylor (analyst): Data-driven analyst who highlights risks and provides grounded perspectives
 
 Create a dynamic debate where:
-- Jordan poses key strategic questions
-- Morgan and Taylor offer contrasting viewpoints
-- The debate explores multiple angles of the topic
-- Discussion includes specific evidence and examples
-- Conclusion synthesizes the key insights
+- Jordan poses key strategic questions about market position, competitive threats, and opportunities
+- Morgan and Taylor offer contrasting viewpoints on strategy, risk tolerance, and market approach
+- The debate explores industry dynamics, competitive pressures, and strategic options
+- Discussion includes specific market data, trends, and strategic implications
+- Morgan pushes for ambitious strategies while Taylor counsels caution
+- Conclusion synthesizes key strategic insights and recommendations
+
+CONTENT FOCUS:
+- Competitive positioning and market share dynamics
+- Strategic options: growth, consolidation, diversification
+- Risk assessment and mitigation strategies
+- Market trends and their strategic implications
+- Investment priorities and resource allocation
 
 The tone should be intellectually engaging with respectful disagreement and collaboration.`,
 
-  INDUSTRY_PULSE: `You are a podcast script writer creating an industry news podcast with three hosts:
-- Riley (anchor): Energetic news anchor who drives the pace
-- Casey (reporter): Field reporter who provides context and details
-- Drew (analyst): Quick-witted analyst who offers rapid insights
+  INDUSTRY_PULSE: `You are a podcast script writer creating an industry news and analysis podcast with three hosts:
+- Riley (anchor): Energetic news anchor who drives the pace and highlights key developments
+- Casey (reporter): Field reporter who provides context, background, and market implications
+- Drew (analyst): Quick-witted analyst who offers strategic insights and predictions
 
 Create a fast-paced news show that:
-- Leads with the most important story
-- Covers multiple news items efficiently
-- Includes brief analysis for each item
+- Leads with the most strategically significant story
+- Covers multiple news items with focus on market and strategic implications
+- Includes analysis of what each development means for the industry
+- Explores competitive dynamics and market shifts
 - Uses crisp transitions between topics
-- Ends with forward-looking predictions
+- Ends with forward-looking predictions and strategic recommendations
 
-The tone should be dynamic and newsy, like a professional business news program.`,
+CONTENT FOCUS:
+- Market-moving developments and their implications
+- Competitive dynamics and industry consolidation
+- Strategic moves by key players
+- Emerging trends and disruption risks
+- Investment and partnership activity
+
+The tone should be dynamic and newsy, like a professional business news program with strategic depth.`,
 };
 
 // Template segment structures
@@ -81,6 +106,34 @@ const TEMPLATE_STRUCTURES: Record<PodcastTemplate, { segments: string[]; speaker
     segments: ['intro', 'headline_1', 'headline_2', 'headline_3', 'wrap_up'],
     speakers: ['riley', 'casey', 'drew'],
   },
+};
+
+// Segment-by-segment generation structure with word allocations
+const SEGMENT_STRUCTURE: Record<PodcastTemplate, Array<{ type: string; title: string; wordPercent: number }>> = {
+  EXECUTIVE_BRIEF: [
+    { type: 'intro', title: 'Opening', wordPercent: 0.12 },
+    { type: 'content', title: 'Company Overview & Market Position', wordPercent: 0.22 },
+    { type: 'content', title: 'Strategic Analysis & Competitive Dynamics', wordPercent: 0.22 },
+    { type: 'analysis', title: 'Risks, Opportunities & Implications', wordPercent: 0.22 },
+    { type: 'analysis', title: 'Forward-Looking Insights', wordPercent: 0.12 },
+    { type: 'outro', title: 'Key Takeaways', wordPercent: 0.10 }
+  ],
+  STRATEGIC_DEBATE: [
+    { type: 'intro', title: 'Setting the Stage', wordPercent: 0.10 },
+    { type: 'content', title: 'Market Position Debate', wordPercent: 0.20 },
+    { type: 'content', title: 'Growth vs Risk Discussion', wordPercent: 0.20 },
+    { type: 'analysis', title: 'Strategic Options Analysis', wordPercent: 0.20 },
+    { type: 'analysis', title: 'Investment & Resource Debate', wordPercent: 0.18 },
+    { type: 'outro', title: 'Synthesis & Recommendations', wordPercent: 0.12 }
+  ],
+  INDUSTRY_PULSE: [
+    { type: 'intro', title: 'Headlines', wordPercent: 0.10 },
+    { type: 'content', title: 'Lead Story', wordPercent: 0.25 },
+    { type: 'content', title: 'Market Developments', wordPercent: 0.20 },
+    { type: 'analysis', title: 'Competitive Moves', wordPercent: 0.20 },
+    { type: 'analysis', title: 'Trend Analysis', wordPercent: 0.15 },
+    { type: 'outro', title: 'Predictions & Wrap-up', wordPercent: 0.10 }
+  ]
 };
 
 export interface PodcastGenerationRequest {
@@ -365,7 +418,42 @@ export class PodcastService {
     return 0.8;
   }
 
-  // Generate podcast script using LLM
+  // Validate script word count against target
+  private validateScriptLength(script: PodcastScript, targetWordCount: number): void {
+    let totalWords = 0;
+    let totalDialogues = 0;
+
+    for (const segment of script.segments) {
+      for (const dialogue of segment.dialogues) {
+        totalWords += dialogue.text.split(/\s+/).length;
+        totalDialogues++;
+      }
+    }
+
+    const percentOfTarget = (totalWords / targetWordCount * 100).toFixed(1);
+
+    logger.info(`Script validation: ${totalWords} words (${percentOfTarget}% of ${targetWordCount} target), ${totalDialogues} dialogues`);
+
+    if (totalWords < targetWordCount * 0.8) {
+      logger.warn(`Script is significantly short: ${totalWords} words vs ${targetWordCount} target (${percentOfTarget}%)`);
+    }
+  }
+
+  // Parse a single segment response from LLM
+  private parseSegmentResponse(content: string): PodcastSegment {
+    let jsonContent = content;
+    const codeBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (codeBlockMatch) {
+      jsonContent = codeBlockMatch[1].trim();
+    }
+    const jsonMatch = jsonContent.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('No JSON found in segment response');
+    }
+    return JSON.parse(jsonMatch[0]) as PodcastSegment;
+  }
+
+  // Generate podcast script using LLM (segment-by-segment approach)
   private async generateScript(
     podcast: PodcastGeneration,
     report: Report
@@ -373,106 +461,85 @@ export class PodcastService {
     const durationConfig = DURATION_CONFIG[podcast.duration];
     const templateStructure = TEMPLATE_STRUCTURES[podcast.template];
     const systemPrompt = await this.getPodcastSystemPrompt(podcast.template);
-
-    // Build context from report
     const reportContent = this.extractReportContent(report);
+    const segmentDefs = SEGMENT_STRUCTURE[podcast.template];
 
-    // Calculate minimum dialogues needed for target duration
-    // Average speaking rate: ~155 words/minute
-    // Average dialogue: ~25-30 words (1-3 sentences)
-    const targetDialogues = Math.ceil((durationConfig.wordCount / 25));
+    const segments: PodcastSegment[] = [];
+    let previousSegmentsSummary = '';
+    let totalTokens = 0;
 
-    const userPrompt = `Create a podcast script based on the following intelligence report:
+    // Generate each segment separately
+    for (let i = 0; i < segmentDefs.length; i++) {
+      const segDef = segmentDefs[i];
+      const segmentWordTarget = Math.ceil(durationConfig.wordCount * segDef.wordPercent);
+      const segmentDialogueTarget = Math.ceil(segmentWordTarget / 30);  // ~30 words per dialogue
 
-REPORT TITLE: ${report.title}
-REPORT TYPE: ${report.workflowType}
+      logger.info(`Generating segment ${i + 1}/${segmentDefs.length}: ${segDef.title} (${segmentWordTarget} words)`);
 
-REPORT CONTENT:
-${reportContent}
+      const segmentPrompt = `Generate SEGMENT ${i + 1} of ${segmentDefs.length} for a podcast about:
+REPORT: ${report.title}
+CONTENT: ${reportContent}
 
-CRITICAL REQUIREMENTS:
-- Target length: ${durationConfig.minutes} minutes (EXACTLY ${durationConfig.wordCount} words total)
-- You MUST generate at least ${targetDialogues} dialogue entries to reach the target word count
-- Format: ${podcast.template.replace('_', ' ')}
-- Speakers: ${templateStructure.speakers.join(', ')}
+${previousSegmentsSummary ? `PREVIOUS SEGMENTS SUMMARY:\n${previousSegmentsSummary}\n` : ''}
+
+=== SEGMENT REQUIREMENTS ===
+Segment Type: ${segDef.type}
+Segment Title: ${segDef.title}
+Target Word Count: ${segmentWordTarget} words (MINIMUM)
+Target Dialogues: ${segmentDialogueTarget} dialogue entries (MINIMUM)
+Speakers: ${templateStructure.speakers.join(', ')}
+
+Each dialogue MUST be 25-40 words. Generate EXACTLY this segment, nothing more.
 
 OUTPUT FORMAT (JSON):
 {
-  "title": "Episode title",
-  "description": "Brief episode description",
-  "segments": [
-    {
-      "type": "intro|content|analysis|outro",
-      "title": "Segment title",
-      "dialogues": [
-        {
-          "speakerId": "speaker_name",
-          "text": "What they say (natural, conversational, 20-35 words)",
-          "notes": "optional: tone hints like 'enthusiastic', 'thoughtful'"
-        }
-      ]
-    }
+  "type": "${segDef.type}",
+  "title": "${segDef.title}",
+  "dialogues": [
+    { "speakerId": "speaker_lowercase", "text": "25-40 word dialogue", "notes": "optional" }
   ]
 }
 
-Important:
-- Make the dialogue natural and conversational
-- Include specific data points and insights from the report
-- Use speaker names in lowercase (${templateStructure.speakers.join(', ')})
-- Each dialogue should be 20-35 words (1-3 sentences) for natural pacing
-- Generate enough dialogues to reach ${durationConfig.wordCount} total words
-- DO NOT stop early - continue generating content until you reach the target word count
-- Return ONLY valid JSON, no additional text`;
+Return ONLY valid JSON for this single segment.`;
 
-    // Calculate max tokens needed for response
-    // JSON structure overhead + dialogue content
-    // Rough estimate: wordCount * 1.5 tokens per word + 2000 for structure
-    const estimatedMaxTokens = Math.ceil(durationConfig.wordCount * 1.5) + 2000;
+      const response = await this.llmService.complete({
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: segmentPrompt }
+        ],
+        model: 'gpt-4o',
+        temperature: await this.getPodcastTemperature(podcast.template),
+        maxTokens: Math.ceil(segmentWordTarget * 2) + 500  // Generous buffer for JSON
+      });
 
-    const response = await this.llmService.complete({
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      model: 'gpt-4o',
-      temperature: await this.getPodcastTemperature(podcast.template),
-      maxTokens: estimatedMaxTokens,
-    });
+      const segment = this.parseSegmentResponse(response.content);
+      segments.push(segment);
+      totalTokens += response.usage.totalTokens;
 
-    // Parse the script
-    try {
-      // Try to extract JSON from the response
-      // First, try to extract from markdown code fences
-      let jsonContent = response.content;
-      const codeBlockMatch = response.content.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (codeBlockMatch) {
-        jsonContent = codeBlockMatch[1].trim();
-      }
-
-      // Now extract the JSON object
-      const jsonMatch = jsonContent.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        logger.error('No JSON found in GPT-4o response. First 500 chars:', response.content.substring(0, 500));
-        throw new Error('No JSON found in response');
-      }
-
-      const script = JSON.parse(jsonMatch[0]) as PodcastScript;
-
-      // Add metadata
-      script.metadata = {
-        model: response.model,
-        provider: response.provider,
-        tokens: response.usage.totalTokens,
-        generatedAt: new Date(),
-      };
-
-      logger.info(`Script generated: ${script.title}, ${script.segments.length} segments`);
-
-      return script;
-    } catch (parseError) {
-      logger.error('Failed to parse podcast script:', parseError);
-      throw new Error(`Failed to parse podcast script: ${parseError}`);
+      // Build summary of what we've generated so far for context
+      const segmentWords = segment.dialogues.reduce((sum, d) => sum + d.text.split(/\s+/).length, 0);
+      previousSegmentsSummary += `- ${segDef.title}: ${segmentWords} words, ${segment.dialogues.length} dialogues\n`;
+      logger.info(`Segment ${i + 1} generated: ${segmentWords} words, ${segment.dialogues.length} dialogues`);
     }
+
+    const script: PodcastScript = {
+      title: `${report.title} - Podcast`,
+      description: `Strategic analysis of ${report.title}`,
+      segments,
+      metadata: {
+        model: 'gpt-4o',
+        provider: 'openai',
+        tokens: totalTokens,
+        generatedAt: new Date(),
+      }
+    };
+
+    // Validate total word count
+    this.validateScriptLength(script, durationConfig.wordCount);
+
+    logger.info(`Script generated: ${script.title}, ${script.segments.length} segments`);
+
+    return script;
   }
 
   // Extract readable content from report

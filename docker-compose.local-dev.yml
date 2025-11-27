@@ -1,0 +1,58 @@
+include:
+  - docker-compose.local.yml
+
+services:
+  backend:
+    image: node:20-alpine
+    container_name: iiot-backend-local-dev
+    working_dir: /app
+    command: sh -c "npm install && npm run dev"
+    environment:
+      NODE_ENV: development
+      PORT: 4001
+      DATABASE_URL: postgresql://postgres:postgres123@postgres:5432/iiot_intelligence
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "4001:4001"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - iiot-local-network
+
+  frontend:
+    image: node:20-alpine
+    container_name: iiot-frontend-local-dev
+    working_dir: /app
+    command: sh -c "npm install && npm run dev"
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: http://localhost/api
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - backend
+    networks:
+      - iiot-local-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: iiot-nginx-local
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.local.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - iiot-local-network

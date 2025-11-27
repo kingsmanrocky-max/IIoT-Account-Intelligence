@@ -3,9 +3,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { ReportCard, CreateReportForm, ReportViewer } from '@/components/reports';
-import { reportsAPI, Report, CreateReportInput, WorkflowType, ReportStatus } from '@/lib/api';
-import { Plus, Filter, RefreshCw, Search, ArrowUpDown, Trash2, CheckSquare, Square } from 'lucide-react';
+import { ReportCard, ReportViewer } from '@/components/reports';
+import { reportsAPI, Report, WorkflowType, ReportStatus } from '@/lib/api';
+import { Filter, RefreshCw, Search, Trash2, CheckSquare, Square } from 'lucide-react';
 
 type SortOption = 'newest' | 'oldest' | 'alphabetical' | 'alphabetical_desc';
 
@@ -14,8 +14,6 @@ export default function ReportsPage() {
   const [reports, setReports] = useState<Report[]>([]);
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isCreating, setIsCreating] = useState(false);
-  const [showCreateForm, setShowCreateForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterWorkflow, setFilterWorkflow] = useState<WorkflowType | ''>('');
@@ -67,20 +65,6 @@ export default function ReportsPage() {
 
     return () => clearInterval(interval);
   }, [reports, loadReports]);
-
-  const handleCreateReport = async (data: CreateReportInput) => {
-    setIsCreating(true);
-    try {
-      await reportsAPI.create(data);
-      setShowCreateForm(false);
-      loadReports();
-    } catch (err) {
-      console.error('Failed to create report:', err);
-      throw err;
-    } finally {
-      setIsCreating(false);
-    }
-  };
 
   const handleRetryReport = async (report: Report) => {
     try {
@@ -192,20 +176,11 @@ export default function ReportsPage() {
     <DashboardLayout>
       <div className="flex flex-col h-full">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-semibold text-meraki-gray-900">Reports</h1>
-            <p className="text-sm text-meraki-gray-500 mt-1">
-              Generate and manage intelligence reports
-            </p>
-          </div>
-          <button
-            onClick={() => setShowCreateForm(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-meraki-blue text-white rounded-lg font-medium hover:bg-meraki-blue-dark transition-colors"
-          >
-            <Plus className="w-5 h-5" />
-            New Report
-          </button>
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold text-meraki-gray-900">Reports</h1>
+          <p className="text-sm text-meraki-gray-500 mt-1">
+            Generate and manage intelligence reports
+          </p>
         </div>
 
         {/* Filters */}
@@ -318,16 +293,8 @@ export default function ReportsPage() {
                 <p className="text-sm text-meraki-gray-500 mt-1">
                   {searchTerm || filterWorkflow || filterStatus
                     ? 'Try adjusting your filters'
-                    : 'Create your first report to get started'}
+                    : 'Use the workflow pages to create your first report'}
                 </p>
-                {!searchTerm && !filterWorkflow && !filterStatus && (
-                  <button
-                    onClick={() => setShowCreateForm(true)}
-                    className="mt-4 px-4 py-2 bg-meraki-blue text-white rounded-lg font-medium hover:bg-meraki-blue-dark transition-colors"
-                  >
-                    Create Report
-                  </button>
-                )}
               </div>
             ) : (
               <div className="grid gap-4 overflow-y-auto pr-2">
@@ -379,30 +346,6 @@ export default function ReportsPage() {
             </div>
           )}
         </div>
-
-        {/* Create Report Modal */}
-        {showCreateForm && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-              <div className="p-6 border-b border-meraki-gray-200">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-semibold text-meraki-gray-900">Create New Report</h2>
-                  <button
-                    onClick={() => setShowCreateForm(false)}
-                    className="p-2 text-meraki-gray-400 hover:text-meraki-gray-600 hover:bg-meraki-gray-100 rounded-lg transition-colors"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-              <div className="p-6">
-                <CreateReportForm onSubmit={handleCreateReport} isLoading={isCreating} />
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </DashboardLayout>
   );

@@ -31,6 +31,33 @@ git commit -m "Brief description of changes"
 git push
 ```
 
+## Local Docker Testing (Optional)
+
+Test your changes in containers before deploying to production.
+
+### Quick Dev Testing (Hot-Reload)
+```bash
+docker-local-dev.bat
+```
+- Access at http://localhost
+- Code changes reflect instantly
+- Full stack with nginx proxy
+- Stop with: `docker-local-stop.bat`
+
+### Production Validation (Full Build)
+```bash
+docker-local-prod.bat
+```
+- Builds containers exactly like production
+- Use to validate before deploying
+- Stop with: `docker-local-stop.bat`
+
+### View Logs
+```bash
+docker-local-logs.bat dev backend
+docker-local-logs.bat prod frontend
+```
+
 ## Deployment to Production
 
 ### One Command to Deploy

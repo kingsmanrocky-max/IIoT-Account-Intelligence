@@ -34,7 +34,29 @@ npm run lint             # Run ESLint
 
 ### Docker (from project root)
 ```bash
-docker-compose up -d     # Start PostgreSQL (5433) and Redis (6380)
+docker-compose up -d     # Start PostgreSQL (5433) and Redis (6380) only
+```
+
+### Local Docker Testing (Optional)
+Test the full containerized stack locally before deploying:
+
+```bash
+# Hot-reload mode (fastest iteration)
+docker-local-dev.bat     # Start with source code mounted
+                         # Changes reflect instantly
+                         # Access at http://localhost
+
+# Production mirror (final validation)
+docker-local-prod.bat    # Full build like production
+                         # Use before deploy.bat
+                         # Access at http://localhost
+
+# Stop containers
+docker-local-stop.bat
+
+# View logs
+docker-local-logs.bat dev backend
+docker-local-logs.bat prod frontend
 ```
 
 ## Architecture
@@ -119,12 +141,17 @@ NEXT_PUBLIC_API_URL=http://localhost:4001/api
 
 ## Important Ports
 
-| Service    | Port | URL                          |
-|------------|------|------------------------------|
-| Frontend   | 4000 | http://localhost:4000        |
-| Backend    | 4001 | http://localhost:4001/api    |
-| PostgreSQL | 5433 | localhost:5433               |
-| Redis      | 6380 | localhost:6380               |
+| Service    | Port | npm run dev | Docker Local Testing |
+|------------|------|-------------|----------------------|
+| Nginx      | 80   | -           | http://localhost     |
+| Frontend   | 4000 | http://localhost:4000 | http://localhost:4000 |
+| Backend    | 4001 | http://localhost:4001/api | http://localhost:4001/api |
+| PostgreSQL | 5433 | localhost:5433 | localhost:5433 |
+| Redis      | 6380 | localhost:6380 | localhost:6380 |
+
+**Recommended access:**
+- `npm run dev`: Use http://localhost:4000 (direct)
+- `docker-local-*`: Use http://localhost (nginx proxy)
 
 ## Deployment Workflow (Windows → GCP)
 
@@ -228,6 +255,191 @@ gcloud compute ssh iiot-intelligence --zone=us-central1-a --command="sudo cat /o
 # Rebuild without cache
 gcloud compute ssh iiot-intelligence --zone=us-central1-a --command="cd /opt/iiot-app && sudo docker compose -f docker-compose.prod.yml build --no-cache && sudo docker compose -f docker-compose.prod.yml up -d"
 ```
+
+## Local Docker Testing Workflow
+
+### Overview
+The project includes two Docker testing modes for validating changes before production deployment:
+
+1. **Dev Mode** (`docker-local-dev.bat`) - Hot-reload with source volumes
+2. **Prod Mode** (`docker-local-prod.bat`) - Full production mirror build
+
+### Recommended Development Workflow
+
+```
+Step 1: npm run dev              → Fast local development
+Step 2: docker-local-dev.bat     → Test in Docker with hot-reload (optional)
+Step 3: docker-local-prod.bat    → Full production build validation (recommended)
+Step 4: deploy.bat               → Deploy to GCP production
+```
+
+### Docker Compose Files
+
+| File | Purpose | Services |
+|------|---------|----------|
+| `docker-compose.yml` | Dev databases only | postgres:5433, redis:6380 |
+| `docker-compose.local.yml` | Local test base | postgres:5433, redis:6380, network |
+| `docker-compose.local-dev.yml` | Hot-reload mode | + backend, frontend, nginx (port 80) |
+| `docker-compose.local-prod.yml` | Production mirror | + backend, frontend, nginx (port 80) |
+| `docker-compose.prod.yml` | GCP production | All services with SSL |
+
+### Dev Mode (Hot-Reload)
+
+**What it does:**
+- Mounts source code as Docker volumes
+- Runs `npm run dev` inside containers
+- Changes reflect instantly without rebuild
+- Includes nginx on port 80
+
+**When to use:**
+- Quick testing of containerized environment
+- Debugging container-specific issues
+- Testing nginx proxy configuration
+
+**Start:**
+```bash
+docker-local-dev.bat
+# Access at http://localhost (nginx proxy)
+# Or directly: http://localhost:4000 (frontend), http://localhost:4001 (backend)
+```
+
+**Configuration:**
+- Backend: `NODE_ENV=development`, connects to postgres:5432 internally
+- Frontend: `NEXT_PUBLIC_API_URL=http://localhost/api` (via nginx)
+- Nginx: HTTP-only config at `nginx/nginx.local.conf`
+
+### Prod Mode (Production Mirror)
+
+**What it does:**
+- Builds containers from Dockerfiles (multi-stage builds)
+- Runs production builds (`npm start`)
+- Exactly mirrors GCP production behavior
+- HTTP-only (no SSL) for local testing
+
+**When to use:**
+- **Before every deployment** to catch build issues
+- Validate Docker-specific behavior
+- Test production optimizations
+- Ensure no container config drift
+
+**Start:**
+```bash
+docker-local-prod.bat
+# Builds images, then starts containers
+# Access at http://localhost
+```
+
+**Configuration:**
+- Backend: `NODE_ENV=production`, reads `.env` file
+- Frontend: `NEXT_PUBLIC_API_URL=http://localhost/api` (build arg)
+- Nginx: Same config as dev mode (HTTP-only)
+
+### Helper Scripts
+
+```bash
+docker-local-dev.bat       # Start hot-reload mode
+docker-local-prod.bat      # Build and start production mirror
+docker-local-stop.bat      # Stop all local Docker containers
+docker-local-logs.bat dev backend    # View dev mode logs
+docker-local-logs.bat prod frontend  # View prod mode logs
+```
+
+### Port Usage
+
+All Docker modes use the same ports as `npm run dev`:
+
+| Port | Service | npm run dev | docker-local-dev | docker-local-prod |
+|------|---------|-------------|------------------|-------------------|
+| 80 | nginx | - | ✓ | ✓ |
+| 4000 | frontend | ✓ | ✓ | ✓ |
+| 4001 | backend | ✓ | ✓ | ✓ |
+| 5433 | postgres | ✓ | ✓ | ✓ |
+| 6380 | redis | ✓ | ✓ | ✓ |
+
+**Access URLs:**
+- `npm run dev`: http://localhost:4000 (direct frontend)
+- Docker modes: http://localhost (nginx proxy to frontend/backend)
+
+### Volumes and Data Persistence
+
+**Dev mode volumes:**
+- `./backend:/app` - Source code hot-reload
+- `./frontend:/app` - Source code hot-reload
+- `/app/node_modules` - Anonymous volume (prevent host override)
+- `/app/.next` - Anonymous volume (Next.js cache)
+
+**Prod mode volumes:**
+- `backend_local_storage` - Persistent report/podcast storage
+- `backend_local_logs` - Persistent logs
+- `postgres_local_data` - Persistent database
+- `redis_local_data` - Persistent cache
+
+**Cleanup:**
+```bash
+# Remove all local Docker volumes
+docker volume rm postgres_local_data redis_local_data backend_local_storage backend_local_logs
+```
+
+### Nginx Configuration
+
+**Production (`nginx/nginx.conf`):**
+- Enforces HTTPS redirect on port 80
+- SSL termination on port 443
+- Full security headers
+
+**Local (`nginx/nginx.local.conf`):**
+- HTTP-only on port 80 (no SSL)
+- No HTTPS redirect
+- Same proxy rules for `/` and `/api`
+- Audio streaming optimization for podcasts
+
+### Troubleshooting Local Docker
+
+**Containers won't start:**
+```bash
+# Check Docker is running
+docker ps
+
+# View container logs
+docker-local-logs.bat dev backend
+docker-local-logs.bat prod frontend
+
+# Rebuild without cache
+docker compose -f docker-compose.local-prod.yml build --no-cache
+```
+
+**Port conflicts:**
+```bash
+# Stop current npm run dev processes first
+# Or stop other Docker stacks
+docker-local-stop.bat
+docker compose down  # Stop regular dev databases
+```
+
+**Frontend can't reach backend:**
+- Check `NEXT_PUBLIC_API_URL` is set to `http://localhost/api`
+- Verify nginx is running: `docker ps | findstr nginx`
+- Test backend directly: http://localhost:4001/health
+
+**Database connection issues:**
+```bash
+# Check database is healthy
+docker ps | findstr postgres
+
+# Connect to database
+docker exec -it iiot-postgres-local psql -U postgres -d iiot_intelligence
+```
+
+### Key Differences from Production
+
+| Aspect | Local Docker | GCP Production |
+|--------|--------------|----------------|
+| SSL | HTTP only (port 80) | HTTPS with SSL (port 443) |
+| Database port | 5433 (external) | 5432 (external) |
+| Redis port | 6380 (external) | 6379 (external) |
+| Domain | localhost | 35.193.254.12 |
+| Volumes | Local named volumes | Persistent on VM |
+| Container names | `-local` or `-local-dev`/`-prod` | `-prod` suffix |
 
 ## Additional Documentation
 

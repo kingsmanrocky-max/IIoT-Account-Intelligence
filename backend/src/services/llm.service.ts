@@ -560,6 +560,33 @@ Only include fields where you have reliable information. Return ONLY valid JSON,
   }
 
   /**
+   * Generate an engaging report title based on company name and workflow type
+   */
+  async generateReportTitle(
+    workflowType: 'ACCOUNT_INTELLIGENCE' | 'COMPETITIVE_INTELLIGENCE' | 'NEWS_DIGEST',
+    companyName: string,
+    additionalContext?: string[]
+  ): Promise<string> {
+    const prompts = {
+      ACCOUNT_INTELLIGENCE: `Generate a concise, professional report title for an account intelligence briefing about ${companyName}. The title should be engaging and hint at strategic insights. Examples: "Strategic Profile: ${companyName} Market Position Analysis", "${companyName}: Growth Trajectory & Partnership Opportunities". Return ONLY the title, no quotes.`,
+      COMPETITIVE_INTELLIGENCE: `Generate a concise, professional report title for a competitive intelligence analysis of ${companyName}. The title should emphasize competitive dynamics. Examples: "${companyName}: Competitive Landscape & Market Positioning", "Market Challenger Analysis: ${companyName}". Return ONLY the title, no quotes.`,
+      NEWS_DIGEST: `Generate a concise, professional report title for a news digest covering ${companyName}${additionalContext?.length ? ` and ${additionalContext.length} other companies` : ''}. The title should be newsy and current. Examples: "Industry Pulse: ${companyName} & Market Developments", "${companyName} News Roundup: Key Developments". Return ONLY the title, no quotes.`
+    };
+
+    const response = await this.complete({
+      messages: [
+        { role: 'system', content: 'You are a professional business report title generator. Generate concise, engaging titles under 100 characters.' },
+        { role: 'user', content: prompts[workflowType] }
+      ],
+      model: 'gpt-4o-mini',  // Fast and cheap for simple title generation
+      temperature: 0.7,
+      maxTokens: 50
+    });
+
+    return response.content.trim().replace(/^["']|["']$/g, '');  // Remove any quotes
+  }
+
+  /**
    * Batch normalize company names (for CSV uploads)
    * Processes multiple companies in a single LLM call for efficiency
    */

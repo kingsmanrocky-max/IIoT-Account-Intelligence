@@ -189,7 +189,7 @@ export default function ScheduleForm({ schedule, onSubmit, onCancel, isLoading =
               <option value="">Select a template...</option>
               {templates.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.name} ({t.workflowType.replace('_', ' ')})
+                  {t.name} {t.workflowType && `(${t.workflowType.replace('_', ' ')})`}
                 </option>
               ))}
             </select>

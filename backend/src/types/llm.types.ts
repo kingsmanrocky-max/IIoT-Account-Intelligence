@@ -1,7 +1,7 @@
 // LLM Provider Types for IIoT Account Intelligence Platform
 
 export type LLMProvider = 'openai' | 'xai';
-export type LLMModel = 'gpt-4' | 'gpt-4-turbo' | 'gpt-4o' | 'gpt-4o-mini' | 'gpt-3.5-turbo' | 'grok-2' | 'grok-2-mini';
+export type LLMModel = 'gpt-4' | 'gpt-4-turbo' | 'gpt-4o' | 'gpt-4o-mini' | 'gpt-3.5-turbo' | 'gpt-5.1' | 'grok-2' | 'grok-2-mini' | 'grok-4-fast-reasoning';
 
 export interface LLMMessage {
   role: 'system' | 'user' | 'assistant';
