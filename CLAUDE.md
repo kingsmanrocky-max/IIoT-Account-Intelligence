@@ -126,9 +126,114 @@ NEXT_PUBLIC_API_URL=http://localhost:4001/api
 | PostgreSQL | 5433 | localhost:5433               |
 | Redis      | 6380 | localhost:6380               |
 
+## Deployment Workflow (Windows → GCP)
+
+### Production Environment
+- **Cloud Provider**: Google Cloud Platform (GCP)
+- **VM Instance**: iiot-intelligence (us-central1-a)
+- **External IP**: 35.193.254.12
+- **App Location**: /opt/iiot-app
+- **Database Name**: iiot_intelligence (NOT iiot_db)
+
+### Quick Deployment
+From Windows PC, use the simple deployment script:
+```bash
+deploy.bat
+```
+
+This script:
+1. Commits and pushes code to GitHub (master branch)
+2. SSHs into GCP VM
+3. Pulls latest code
+4. Rebuilds Docker containers
+5. Runs Prisma migrations
+6. Shows deployment status
+
+### Other Helper Scripts
+```bash
+check-status.bat    # Check production container status
+view-logs.bat       # View backend logs
+```
+
+### Manual Deployment Steps
+If you need to deploy manually:
+
+```bash
+# 1. Commit and push from local
+git add .
+git commit -m "Your changes"
+git push origin master
+
+# 2. SSH to VM and update
+gcloud compute ssh iiot-intelligence --zone=us-central1-a
+cd /opt/iiot-app
+sudo git pull origin master
+
+# 3. Rebuild and restart containers
+sudo docker compose -f docker-compose.prod.yml build
+sudo docker compose -f docker-compose.prod.yml up -d
+
+# 4. Run migrations if needed
+sudo docker compose -f docker-compose.prod.yml exec -T backend npx prisma migrate deploy
+
+# 5. Check status
+sudo docker ps
+```
+
+### Important Production Notes
+
+1. **Database Configuration**
+   - Production database name: `iiot_intelligence`
+   - Local dev database name: `iiot_db`
+   - The DATABASE_URL in production `.env` must use `iiot_intelligence`
+
+2. **Health Check Endpoint**
+   - Backend health check is at `/health` (NOT `/api/health`)
+   - Configured in `backend/Dockerfile` line 54
+   - Health check runs every 30s with 40s start period
+
+3. **Docker Compose**
+   - Production config: `docker-compose.prod.yml`
+   - Local dev config: `docker-compose.yml` (PostgreSQL + Redis only)
+   - Always use `docker compose` (v2) not `docker-compose` (v1)
+
+4. **Git Workflow**
+   - Work exclusively from `master` branch
+   - All development branches have been consolidated
+   - Simple workflow: code → commit → push → deploy
+
+5. **Container Health**
+   - All containers should show "healthy" status
+   - If backend shows "unhealthy", check:
+     - DATABASE_URL has correct database name
+     - Health check endpoint is correct
+     - Container logs: `sudo docker logs iiot-backend-prod`
+
+### Troubleshooting Deployment
+
+**Backend won't start:**
+```bash
+# Check logs
+gcloud compute ssh iiot-intelligence --zone=us-central1-a --command="sudo docker logs iiot-backend-prod --tail=100"
+
+# Verify database name
+gcloud compute ssh iiot-intelligence --zone=us-central1-a --command="sudo docker exec iiot-postgres-prod psql -U iiot_user -l"
+
+# Check .env file
+gcloud compute ssh iiot-intelligence --zone=us-central1-a --command="sudo cat /opt/iiot-app/backend/.env | grep DATABASE_URL"
+```
+
+**Containers unhealthy:**
+```bash
+# Rebuild without cache
+gcloud compute ssh iiot-intelligence --zone=us-central1-a --command="cd /opt/iiot-app && sudo docker compose -f docker-compose.prod.yml build --no-cache && sudo docker compose -f docker-compose.prod.yml up -d"
+```
+
 ## Additional Documentation
 
+- `WORKFLOW.md` - Simple development and deployment guide for beginners
 - `README.md` - Quick start guide
 - `SETUP_GUIDE.md` - Detailed setup instructions
 - `TECHNICAL_SPECIFICATIONS.md` - Comprehensive technical specs
 - `VIRTUAL_PODCAST_DESIGN.md` - Podcast feature architecture
+- `deploy/gcp/README.md` - GCP deployment details
