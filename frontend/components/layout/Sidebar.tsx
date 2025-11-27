@@ -36,7 +36,6 @@ const navigationItems = [
   { name: 'Users', href: '/users', icon: Users, roles: ['ADMIN'] },
   { name: 'Admin', href: '/admin', icon: Shield, roles: ['ADMIN'] },
   { name: 'Prompts', href: '/admin/prompts', icon: MessageSquare, roles: ['ADMIN'] },
-  { name: 'Settings', href: '/settings', icon: Settings, roles: ['USER', 'ADMIN'] },
 ];
 
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {

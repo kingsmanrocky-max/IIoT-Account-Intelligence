@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { ReportCard, ReportViewer, SectionSelector, DepthSelector, ProductSelector, FocusAreaSelector, WebexDeliverySelector } from '@/components/reports';
-import { reportsAPI, Report, CreateReportInput, ReportFormat, DepthPreference, CompetitiveIntelligenceOptions, WebexDeliveryInput } from '@/lib/api';
+import { PodcastOptionsPanel } from '@/components/podcast';
+import { reportsAPI, Report, CreateReportInput, ReportFormat, DepthPreference, CompetitiveIntelligenceOptions, WebexDeliveryInput, PodcastOptions } from '@/lib/api';
 import { WebexDeliveryOptions, DEFAULT_WEBEX_DELIVERY, validateWebexDestination } from '@/lib/constants/webex-delivery';
 import { ArrowRight, ArrowLeft, Target, Check, Sparkles, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 
@@ -31,6 +32,11 @@ export default function CompetitiveIntelligencePage() {
   const [depth, setDepth] = useState<DepthPreference>('standard');
   const [requestedFormats, setRequestedFormats] = useState<ReportFormat[]>([]);
   const [webexDelivery, setWebexDelivery] = useState<WebexDeliveryOptions>(DEFAULT_WEBEX_DELIVERY);
+  const [includePodcast, setIncludePodcast] = useState(false);
+  const [podcastOptions, setPodcastOptions] = useState<PodcastOptions>({
+    template: 'EXECUTIVE_BRIEF',
+    duration: 'STANDARD',
+  });
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -179,6 +185,7 @@ export default function CompetitiveIntelligencePage() {
         requestedFormats: requestedFormats.length > 0 ? requestedFormats : undefined,
         competitiveOptions,
         delivery,
+        podcastOptions: includePodcast ? podcastOptions : undefined,
       };
 
       await reportsAPI.create(input);
@@ -388,6 +395,27 @@ export default function CompetitiveIntelligencePage() {
                 value={webexDelivery}
                 onChange={setWebexDelivery}
               />
+            </div>
+
+            {/* Virtual Podcast Option */}
+            <div className="space-y-4">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={includePodcast}
+                  onChange={(e) => setIncludePodcast(e.target.checked)}
+                  className="w-4 h-4 text-meraki-blue bg-white border-meraki-gray-300 rounded focus:ring-meraki-blue focus:ring-2"
+                />
+                <span className="text-sm font-medium text-meraki-gray-700">
+                  Generate Virtual Podcast
+                </span>
+              </label>
+              {includePodcast && (
+                <PodcastOptionsPanel
+                  options={podcastOptions}
+                  onChange={setPodcastOptions}
+                />
+              )}
             </div>
           </div>
         );

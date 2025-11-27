@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { ReportCard, ReportViewer, DepthSelector, WebexDeliverySelector } from '@/components/reports';
-import { reportsAPI, Report, CreateReportInput, ReportFormat, DepthPreference, WebexDeliveryInput } from '@/lib/api';
+import { PodcastOptionsPanel } from '@/components/podcast';
+import { reportsAPI, Report, CreateReportInput, ReportFormat, DepthPreference, WebexDeliveryInput, PodcastOptions } from '@/lib/api';
 import { WebexDeliveryOptions, DEFAULT_WEBEX_DELIVERY, validateWebexDestination } from '@/lib/constants/webex-delivery';
 import { Building2, Sparkles, RefreshCw, ChevronDown, ChevronUp, Check, Loader2, X } from 'lucide-react';
 import { ValidatedCompany } from '@/lib/types/company-validation';
@@ -18,6 +19,11 @@ export default function AccountIntelligencePage() {
   const [depth, setDepth] = useState<DepthPreference>('standard');
   const [requestedFormats, setRequestedFormats] = useState<ReportFormat[]>([]);
   const [webexDelivery, setWebexDelivery] = useState<WebexDeliveryOptions>(DEFAULT_WEBEX_DELIVERY);
+  const [includePodcast, setIncludePodcast] = useState(false);
+  const [podcastOptions, setPodcastOptions] = useState<PodcastOptions>({
+    template: 'EXECUTIVE_BRIEF',
+    duration: 'STANDARD',
+  });
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showOptions, setShowOptions] = useState(false);
@@ -177,6 +183,7 @@ export default function AccountIntelligencePage() {
         depth,
         requestedFormats: requestedFormats.length > 0 ? requestedFormats : undefined,
         delivery,
+        podcastOptions: includePodcast ? podcastOptions : undefined,
       };
 
       await reportsAPI.create(input);
@@ -463,6 +470,28 @@ export default function AccountIntelligencePage() {
                             disabled={isGenerating}
                           />
                         </div>
+
+                        {/* Virtual Podcast Option */}
+                        <div className="space-y-4">
+                          <label className="flex items-center gap-3 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={includePodcast}
+                              onChange={(e) => setIncludePodcast(e.target.checked)}
+                              disabled={isGenerating}
+                              className="w-4 h-4 text-meraki-blue bg-white border-meraki-gray-300 rounded focus:ring-meraki-blue focus:ring-2 disabled:opacity-50"
+                            />
+                            <span className="text-sm font-medium text-meraki-gray-700">
+                              Generate Virtual Podcast
+                            </span>
+                          </label>
+                          {includePodcast && (
+                            <PodcastOptionsPanel
+                              options={podcastOptions}
+                              onChange={setPodcastOptions}
+                            />
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -568,7 +597,7 @@ export default function AccountIntelligencePage() {
         {/* Report Viewer Modal */}
         {selectedReport && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+            <div className="bg-white rounded-xl w-full max-w-4xl h-[90vh] flex flex-col">
               <ReportViewer
                 report={selectedReport}
                 onClose={() => setSelectedReport(null)}

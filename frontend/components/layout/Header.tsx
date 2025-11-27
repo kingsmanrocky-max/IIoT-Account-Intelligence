@@ -1,7 +1,7 @@
 'use client';
 
 import { useAuth } from '@/lib/contexts/AuthContext';
-import { Menu, User, LogOut, Settings, Bell } from 'lucide-react';
+import { Menu, User, LogOut, Bell } from 'lucide-react';
 import { useState } from 'react';
 
 interface HeaderProps {
@@ -64,10 +64,6 @@ export default function Header({ onMenuClick }: HeaderProps) {
                     </p>
                   </div>
                   <div className="p-2">
-                    <button className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm text-meraki-gray-700 hover:bg-meraki-gray-100 transition-colors">
-                      <Settings className="h-4 w-4" />
-                      <span>Settings</span>
-                    </button>
                     <button
                       onClick={() => {
                         setShowUserMenu(false);

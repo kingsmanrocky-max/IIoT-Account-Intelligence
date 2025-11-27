@@ -314,7 +314,7 @@ export default function ReportViewer({ report, onClose }: ReportViewerProps) {
           {showScrollTop && (
             <button
               onClick={scrollToTop}
-              className="fixed bottom-6 right-6 p-3 bg-meraki-blue text-white rounded-full shadow-lg hover:bg-meraki-blue-dark transition-all z-20"
+              className="absolute bottom-6 right-6 p-3 bg-meraki-blue text-white rounded-full shadow-lg hover:bg-meraki-blue-dark transition-all z-20"
               title="Scroll to top"
             >
               <ChevronUp className="w-5 h-5" />
