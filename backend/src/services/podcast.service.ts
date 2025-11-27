@@ -15,6 +15,7 @@ import { getTTSService, TTSService } from './tts.service';
 import { getAudioProcessorService, AudioProcessorService } from './audio-processor.service';
 import {
   PodcastScript,
+  PodcastSegment,
   TTSSegment,
   DURATION_CONFIG,
   STATUS_PROGRESS,
