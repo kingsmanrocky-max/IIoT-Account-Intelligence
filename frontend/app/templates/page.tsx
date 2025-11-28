@@ -13,7 +13,8 @@ import {
   UpdateTemplateInput,
   WorkflowType,
 } from '@/lib/api';
-import { Plus, Filter, RefreshCw, Search, LayoutTemplate } from 'lucide-react';
+import { Plus, Filter, RefreshCw, Search, LayoutTemplate, Loader2, Sparkles, Check, X, Building2, MapPin, TrendingUp } from 'lucide-react';
+import { ValidatedCompany } from '@/lib/types/company-validation';
 
 type SortOption = 'newest' | 'oldest' | 'alphabetical';
 
@@ -35,6 +36,9 @@ export default function TemplatesPage() {
   const [applyCompanyName, setApplyCompanyName] = useState('');
   const [applyCompanyNames, setApplyCompanyNames] = useState('');
   const [applyError, setApplyError] = useState<string | null>(null);
+  const [isValidating, setIsValidating] = useState(false);
+  const [validationResult, setValidationResult] = useState<ValidatedCompany | null>(null);
+  const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
 
   const loadTemplates = useCallback(async () => {
     setIsLoading(true);
@@ -159,7 +163,65 @@ export default function TemplatesPage() {
     setApplyCompanyName('');
     setApplyCompanyNames('');
     setApplyError(null);
+    setValidationResult(null);
+    setIsValidating(false);
   };
+
+  const handleValidateCompany = async () => {
+    if (!applyCompanyName.trim()) return;
+    setIsValidating(true);
+    setValidationResult(null);
+    try {
+      const response = await reportsAPI.enrichCompany(applyCompanyName.trim());
+      setValidationResult({
+        originalName: applyCompanyName,
+        validatedName: response.data.data.validatedName,
+        status: 'validated',
+        enrichedData: response.data.data,
+        isAccepted: false,
+      });
+    } catch (err) {
+      setValidationResult({
+        originalName: applyCompanyName,
+        status: 'error',
+        isAccepted: false,
+        errorMessage: 'Failed to validate company name',
+      });
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  const handleAcceptValidation = () => {
+    if (validationResult?.validatedName) {
+      setApplyCompanyName(validationResult.validatedName);
+      setValidationResult({ ...validationResult, isAccepted: true });
+    }
+  };
+
+  const handleDismissValidation = () => {
+    setValidationResult(null);
+  };
+
+  // Auto-generate title when company is validated
+  useEffect(() => {
+    const generateTitle = async () => {
+      if (applyingTemplate && applyCompanyName.trim().length > 2 && validationResult?.isAccepted) {
+        setIsGeneratingTitle(true);
+        try {
+          const title = await reportsAPI.generateTitle(applyingTemplate.workflowType, applyCompanyName.trim());
+          setApplyTitle(title);
+        } catch {
+          const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          setApplyTitle(`${applyingTemplate.workflowType.replace(/_/g, ' ')} - ${applyCompanyName.trim()} - ${dateStr}`);
+        } finally {
+          setIsGeneratingTitle(false);
+        }
+      }
+    };
+    const timer = setTimeout(generateTitle, 500);
+    return () => clearTimeout(timer);
+  }, [applyCompanyName, validationResult?.isAccepted, applyingTemplate]);
 
   // Filter and sort templates
   const filteredTemplates = templates
@@ -380,21 +442,6 @@ export default function TemplatesPage() {
                   </div>
                 )}
 
-                <div>
-                  <label htmlFor="applyTitle" className="block text-sm font-medium text-meraki-gray-700 mb-1.5">
-                    Report Title
-                  </label>
-                  <input
-                    type="text"
-                    id="applyTitle"
-                    value={applyTitle}
-                    onChange={(e) => setApplyTitle(e.target.value)}
-                    placeholder="e.g., Q4 Analysis - Acme Corp"
-                    className="w-full px-4 py-2.5 border border-meraki-gray-300 rounded-lg text-meraki-gray-900 placeholder-meraki-gray-400 focus:outline-none focus:ring-2 focus:ring-meraki-blue focus:border-transparent"
-                    disabled={isSubmitting}
-                  />
-                </div>
-
                 {applyingTemplate.workflowType === 'NEWS_DIGEST' ? (
                   <div>
                     <label htmlFor="applyCompanyNames" className="block text-sm font-medium text-meraki-gray-700 mb-1.5">
@@ -415,17 +462,117 @@ export default function TemplatesPage() {
                     <label htmlFor="applyCompanyName" className="block text-sm font-medium text-meraki-gray-700 mb-1.5">
                       Company Name
                     </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        id="applyCompanyName"
+                        value={applyCompanyName}
+                        onChange={(e) => {
+                          setApplyCompanyName(e.target.value);
+                          setValidationResult(null);
+                        }}
+                        placeholder="e.g., Acme Corporation"
+                        className="flex-1 px-4 py-3 border border-meraki-gray-300 rounded-lg text-meraki-gray-900 placeholder-meraki-gray-400 focus:outline-none focus:ring-2 focus:ring-meraki-blue focus:border-transparent"
+                        disabled={isSubmitting}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleValidateCompany}
+                        disabled={isValidating || isSubmitting || !applyCompanyName.trim()}
+                        className="flex items-center gap-2 px-4 py-3 bg-meraki-blue/10 text-meraki-blue font-medium rounded-lg hover:bg-meraki-blue/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isValidating ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Validating...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-4 h-4" />
+                            Validate
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {validationResult && validationResult.status === 'validated' && validationResult.enrichedData && (
+                      <div className="mt-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1">
+                            <div className="text-sm text-amber-800 line-through mb-1">{validationResult.originalName}</div>
+                            <div className="font-medium text-amber-900">{validationResult.validatedName}</div>
+                          </div>
+                          {!validationResult.isAccepted && (
+                            <div className="flex gap-2 ml-4">
+                              <button
+                                onClick={handleAcceptValidation}
+                                className="p-1.5 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors"
+                                title="Accept"
+                              >
+                                <Check className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={handleDismissValidation}
+                                className="p-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors"
+                                title="Dismiss"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-3 gap-3 mt-3 text-xs">
+                          {validationResult.enrichedData.industry && (
+                            <div className="flex items-center gap-1.5 text-amber-700">
+                              <Building2 className="w-3.5 h-3.5" />
+                              <span>{validationResult.enrichedData.industry}</span>
+                            </div>
+                          )}
+                          {validationResult.enrichedData.headquarters && (
+                            <div className="flex items-center gap-1.5 text-amber-700">
+                              <MapPin className="w-3.5 h-3.5" />
+                              <span>{validationResult.enrichedData.headquarters}</span>
+                            </div>
+                          )}
+                          {validationResult.enrichedData.confidence && (
+                            <div className="flex items-center gap-1.5 text-amber-700">
+                              <TrendingUp className="w-3.5 h-3.5" />
+                              <span>{validationResult.enrichedData.confidence}% confidence</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {validationResult && validationResult.status === 'error' && (
+                      <div className="mt-3 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                        {validationResult.errorMessage || 'Failed to validate company name'}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div>
+                  <label htmlFor="applyTitle" className="block text-sm font-medium text-meraki-gray-700 mb-1.5">
+                    Report Title
+                  </label>
+                  <div className="relative">
                     <input
                       type="text"
-                      id="applyCompanyName"
-                      value={applyCompanyName}
-                      onChange={(e) => setApplyCompanyName(e.target.value)}
-                      placeholder="e.g., Acme Corporation"
+                      id="applyTitle"
+                      value={applyTitle}
+                      onChange={(e) => setApplyTitle(e.target.value)}
+                      placeholder="e.g., Q4 Analysis - Acme Corp"
                       className="w-full px-4 py-2.5 border border-meraki-gray-300 rounded-lg text-meraki-gray-900 placeholder-meraki-gray-400 focus:outline-none focus:ring-2 focus:ring-meraki-blue focus:border-transparent"
                       disabled={isSubmitting}
                     />
+                    {isGeneratingTitle && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <Loader2 className="w-4 h-4 animate-spin text-meraki-blue" />
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
 
                 <div className="flex gap-3 pt-2">
                   <button

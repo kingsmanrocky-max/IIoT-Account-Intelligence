@@ -71,6 +71,24 @@ function getConfigSummary(template: Template): string[] {
     summary.push(config.requestedFormats.join(', '));
   }
 
+  // News Digest options
+  if (config.newsDigestOptions) {
+    const nd = config.newsDigestOptions;
+    if (nd.timePeriod) {
+      summary.push(nd.timePeriod.replace('-', ' '));
+    }
+    if (nd.newsFocus && nd.newsFocus.length > 0) {
+      summary.push(`${nd.newsFocus.length} topics`);
+    }
+    if (nd.outputStyle) {
+      summary.push(nd.outputStyle);
+    }
+  }
+
+  if (config.podcastOptions?.enabled) {
+    summary.push('Podcast');
+  }
+
   if (config.delivery) {
     summary.push('Webex delivery');
   }

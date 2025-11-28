@@ -19,6 +19,8 @@ export interface CreateScheduleInput {
   isActive?: boolean;
   deliveryMethod: DeliveryMethod;
   deliveryDestination?: string;
+  targetCompanyName?: string;
+  targetCompanyNames?: string[];
 }
 
 export interface UpdateScheduleInput {
@@ -28,6 +30,8 @@ export interface UpdateScheduleInput {
   timezone?: string;
   deliveryMethod?: DeliveryMethod;
   deliveryDestination?: string;
+  targetCompanyName?: string;
+  targetCompanyNames?: string[];
 }
 
 export interface ListSchedulesParams {
@@ -92,6 +96,8 @@ export class ScheduleService {
       isActive = true,
       deliveryMethod,
       deliveryDestination,
+      targetCompanyName,
+      targetCompanyNames,
     } = input;
 
     logger.info('Creating schedule', { userId, name, templateId });
@@ -137,6 +143,8 @@ export class ScheduleService {
         isActive,
         deliveryMethod,
         deliveryDestination,
+        targetCompanyName: targetCompanyName?.trim(),
+        targetCompanyNames: targetCompanyNames || null,
         nextRunAt,
       },
       include: {
@@ -204,7 +212,7 @@ export class ScheduleService {
       throw new Error('Schedule not found');
     }
 
-    const { name, description, cronExpression, timezone, deliveryMethod, deliveryDestination } = input;
+    const { name, description, cronExpression, timezone, deliveryMethod, deliveryDestination, targetCompanyName, targetCompanyNames } = input;
 
     // Validate name if provided
     if (name !== undefined) {
@@ -235,6 +243,8 @@ export class ScheduleService {
     if (timezone !== undefined) updateData.timezone = timezone;
     if (deliveryMethod !== undefined) updateData.deliveryMethod = deliveryMethod;
     if (deliveryDestination !== undefined) updateData.deliveryDestination = deliveryDestination;
+    if (targetCompanyName !== undefined) updateData.targetCompanyName = targetCompanyName?.trim();
+    if (targetCompanyNames !== undefined) updateData.targetCompanyNames = targetCompanyNames || null;
 
     // Recalculate next run if cron or timezone changed
     if ((cronExpression || timezone) && existing.isActive) {
@@ -396,13 +406,28 @@ export class ScheduleService {
     const timestamp = new Date().toISOString().split('T')[0];
     const title = `${schedule.name} - ${timestamp}`;
 
-    // For scheduled reports, we need to have default company info
-    // This should be stored in the schedule or template
-    // For now, create a placeholder report
+    // Get target company data from schedule
+    let companyName = schedule.targetCompanyName;
+    let companyNames = schedule.targetCompanyNames as string[] | undefined;
+
+    // Validate that required company data is present
+    if (schedule.template.workflowType !== 'NEWS_DIGEST') {
+      // Account Intelligence and Competitive Intelligence need a company name
+      if (!companyName) {
+        throw new Error('Schedule is missing company name configuration');
+      }
+    } else {
+      // News Digest needs company names array
+      if (!companyNames || companyNames.length === 0) {
+        throw new Error('Schedule is missing company names configuration');
+      }
+    }
+
+    // Apply template to create report with company data
     const report = await templateService.applyTemplate(schedule.templateId, userId, {
       title,
-      // Company info would need to come from schedule configuration
-      // For manual trigger, we'll need this to be passed in or stored
+      companyName,
+      companyNames: companyNames || [],
     });
 
     logger.info('Schedule triggered manually', { scheduleId: id, reportId: report.id });

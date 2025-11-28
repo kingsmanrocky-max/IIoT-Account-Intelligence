@@ -22,6 +22,14 @@ export interface TemplateConfiguration {
   newsDigestOptions?: NewsDigestOptions;
   delivery?: DeliveryOptions;
   requestedFormats?: ('PDF' | 'DOCX')[];
+  podcastOptions?: {
+    enabled: boolean;
+    template?: 'EXECUTIVE_BRIEF' | 'STRATEGIC_DEBATE' | 'INDUSTRY_PULSE';
+    duration?: 'SHORT' | 'STANDARD' | 'LONG';
+    deliveryEnabled?: boolean;
+    deliveryDestination?: string;
+    deliveryDestinationType?: 'email' | 'roomId';
+  };
 }
 
 export interface CreateTemplateInput {
@@ -87,8 +95,10 @@ export class UserTemplateService {
   async getTemplates(
     userId: string,
     params?: ListTemplatesParams
-  ): Promise<{ templates: Template[]; total: number }> {
+  ): Promise<{ templates: any[]; total: number }> {
     const { workflowType, limit = 20, offset = 0 } = params || {};
+
+    logger.info('getTemplates called', { userId, workflowType, limit, offset });
 
     const where: any = { userId };
     if (workflowType) {
@@ -105,7 +115,23 @@ export class UserTemplateService {
       prisma.template.count({ where }),
     ]);
 
-    return { templates, total };
+    logger.info('Templates fetched from database', { count: templates.length, total });
+
+    // Convert to plain objects to ensure proper JSON serialization
+    const serializedTemplates = templates.map(t => ({
+      id: t.id,
+      userId: t.userId,
+      name: t.name,
+      description: t.description,
+      workflowType: t.workflowType,
+      configuration: t.configuration,
+      createdAt: t.createdAt.toISOString(),
+      updatedAt: t.updatedAt.toISOString(),
+    }));
+
+    logger.info('Templates serialized', { serialized: JSON.stringify(serializedTemplates) });
+
+    return { templates: serializedTemplates, total };
   }
 
   // Get a single template
@@ -261,6 +287,13 @@ export class UserTemplateService {
       newsDigestOptions: configuration.newsDigestOptions,
       requestedFormats: configuration.requestedFormats,
       delivery: configuration.delivery,
+      podcastOptions: configuration.podcastOptions?.enabled ? {
+        template: configuration.podcastOptions.template || 'EXECUTIVE_BRIEF',
+        duration: configuration.podcastOptions.duration || 'STANDARD',
+        deliveryEnabled: configuration.podcastOptions.deliveryEnabled,
+        deliveryDestination: configuration.podcastOptions.deliveryDestination,
+        deliveryDestinationType: configuration.podcastOptions.deliveryDestinationType,
+      } : undefined,
     });
 
     logger.info('Report created from template', {

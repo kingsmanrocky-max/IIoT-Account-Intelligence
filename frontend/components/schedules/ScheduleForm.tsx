@@ -8,7 +8,10 @@ import {
   UpdateScheduleInput,
   DeliveryMethod,
   templatesAPI,
+  reportsAPI,
 } from '@/lib/api';
+import { ValidatedCompany } from '@/lib/types/company-validation';
+import { Loader2, Check, X, Building2, MapPin, TrendingUp } from 'lucide-react';
 import CronBuilder from './CronBuilder';
 
 interface ScheduleFormProps {
@@ -47,6 +50,14 @@ export default function ScheduleForm({ schedule, onSubmit, onCancel, isLoading =
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>(schedule?.deliveryMethod || 'DOWNLOAD');
   const [deliveryDestination, setDeliveryDestination] = useState(schedule?.deliveryDestination || '');
 
+  // Company target fields
+  const [targetCompanyName, setTargetCompanyName] = useState(schedule?.targetCompanyName || '');
+  const [targetCompanyNames, setTargetCompanyNames] = useState(schedule?.targetCompanyNames?.join(', ') || '');
+
+  // Company validation
+  const [isValidating, setIsValidating] = useState(false);
+  const [validationResult, setValidationResult] = useState<ValidatedCompany | null>(null);
+
   // Templates list
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
@@ -68,6 +79,46 @@ export default function ScheduleForm({ schedule, onSubmit, onCancel, isLoading =
     }
     loadTemplates();
   }, []);
+
+  // Get selected template
+  const selectedTemplate = templates.find((t) => t.id === templateId) || schedule?.template;
+
+  // Company validation handlers
+  const handleValidateCompany = async () => {
+    if (!targetCompanyName.trim()) return;
+    setIsValidating(true);
+    setValidationResult(null);
+    try {
+      const response = await reportsAPI.enrichCompany(targetCompanyName.trim());
+      setValidationResult({
+        originalName: targetCompanyName,
+        validatedName: response.data.data.validatedName,
+        status: 'validated',
+        enrichedData: response.data.data,
+        isAccepted: false,
+      });
+    } catch (err) {
+      setValidationResult({
+        originalName: targetCompanyName,
+        status: 'error',
+        isAccepted: false,
+        errorMessage: 'Failed to validate company name',
+      });
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  const handleAcceptValidation = () => {
+    if (validationResult?.validatedName) {
+      setTargetCompanyName(validationResult.validatedName);
+      setValidationResult({ ...validationResult, isAccepted: true });
+    }
+  };
+
+  const handleDismissValidation = () => {
+    setValidationResult(null);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,6 +158,10 @@ export default function ScheduleForm({ schedule, onSubmit, onCancel, isLoading =
         timezone,
         deliveryMethod,
         deliveryDestination: deliveryDestination.trim() || undefined,
+        targetCompanyName: selectedTemplate?.workflowType !== 'NEWS_DIGEST' ? targetCompanyName.trim() || undefined : undefined,
+        targetCompanyNames: selectedTemplate?.workflowType === 'NEWS_DIGEST'
+          ? targetCompanyNames.split(',').map(s => s.trim()).filter(Boolean)
+          : undefined,
       };
       await onSubmit(data);
     } else {
@@ -119,6 +174,10 @@ export default function ScheduleForm({ schedule, onSubmit, onCancel, isLoading =
         isActive,
         deliveryMethod,
         deliveryDestination: deliveryDestination.trim() || undefined,
+        targetCompanyName: selectedTemplate?.workflowType !== 'NEWS_DIGEST' ? targetCompanyName.trim() || undefined : undefined,
+        targetCompanyNames: selectedTemplate?.workflowType === 'NEWS_DIGEST'
+          ? targetCompanyNames.split(',').map(s => s.trim()).filter(Boolean)
+          : undefined,
       };
       await onSubmit(data);
     }
@@ -202,6 +261,124 @@ export default function ScheduleForm({ schedule, onSubmit, onCancel, isLoading =
         <div className="p-3 bg-meraki-gray-50 rounded-lg">
           <p className="text-sm font-medium text-meraki-gray-700">Template</p>
           <p className="text-sm text-meraki-gray-600">{schedule.template.name}</p>
+        </div>
+      )}
+
+      {/* Target Company Input - Dynamic based on template workflow type */}
+      {selectedTemplate && (
+        <div className="space-y-4">
+          {selectedTemplate.workflowType === 'NEWS_DIGEST' ? (
+            // NEWS_DIGEST: Multiple companies, comma-separated
+            <div>
+              <label htmlFor="targetCompanyNames" className="block text-sm font-medium text-meraki-gray-700 mb-1.5">
+                Target Companies
+              </label>
+              <input
+                type="text"
+                id="targetCompanyNames"
+                value={targetCompanyNames}
+                onChange={(e) => setTargetCompanyNames(e.target.value)}
+                placeholder="e.g., Apple, Microsoft, Google"
+                className="w-full px-4 py-2.5 border border-meraki-gray-300 rounded-lg text-meraki-gray-900 placeholder-meraki-gray-400 focus:outline-none focus:ring-2 focus:ring-meraki-blue focus:border-transparent"
+                disabled={isLoading}
+              />
+              <p className="mt-1.5 text-xs text-meraki-gray-500">Enter 2-5 company names, separated by commas</p>
+            </div>
+          ) : (
+            // ACCOUNT_INTELLIGENCE / COMPETITIVE_INTELLIGENCE: Single company with validation
+            <div className="space-y-3">
+              <label htmlFor="targetCompanyName" className="block text-sm font-medium text-meraki-gray-700">
+                Target Company
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  id="targetCompanyName"
+                  value={targetCompanyName}
+                  onChange={(e) => {
+                    setTargetCompanyName(e.target.value);
+                    setValidationResult(null);
+                  }}
+                  placeholder="e.g., Cisco Systems"
+                  className="flex-1 px-4 py-2.5 border border-meraki-gray-300 rounded-lg text-meraki-gray-900 placeholder-meraki-gray-400 focus:outline-none focus:ring-2 focus:ring-meraki-blue focus:border-transparent"
+                  disabled={isLoading}
+                />
+                <button
+                  type="button"
+                  onClick={handleValidateCompany}
+                  disabled={isValidating || !targetCompanyName.trim() || isLoading}
+                  className="px-4 py-2.5 bg-meraki-blue text-white rounded-lg hover:bg-meraki-blue/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium whitespace-nowrap flex items-center gap-2"
+                >
+                  {isValidating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Validating...
+                    </>
+                  ) : (
+                    'Validate'
+                  )}
+                </button>
+              </div>
+
+              {/* Validation Result Card */}
+              {validationResult && validationResult.status === 'validated' && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Building2 className="w-4 h-4 text-green-600 flex-shrink-0" />
+                        <p className="font-medium text-green-900 truncate">{validationResult.validatedName}</p>
+                      </div>
+                      {validationResult.enrichedData?.industry && (
+                        <div className="flex items-center gap-2 text-sm text-green-700">
+                          <TrendingUp className="w-3.5 h-3.5 flex-shrink-0" />
+                          <span className="truncate">{validationResult.enrichedData.industry}</span>
+                        </div>
+                      )}
+                      {validationResult.enrichedData?.headquarters && (
+                        <div className="flex items-center gap-2 text-sm text-green-700">
+                          <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
+                          <span className="truncate">{validationResult.enrichedData.headquarters}</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-2 flex-shrink-0">
+                      {!validationResult.isAccepted ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={handleAcceptValidation}
+                            className="p-1.5 text-green-600 hover:bg-green-100 rounded transition-colors"
+                            title="Accept"
+                          >
+                            <Check className="w-5 h-5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleDismissValidation}
+                            className="p-1.5 text-red-600 hover:bg-red-100 rounded transition-colors"
+                            title="Dismiss"
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
+                        </>
+                      ) : (
+                        <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded">
+                          Accepted
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {validationResult && validationResult.status === 'error' && (
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                  {validationResult.errorMessage || 'Failed to validate company name'}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

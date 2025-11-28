@@ -27,6 +27,8 @@ export async function scheduleRoutes(app: FastifyInstance) {
           isActive: { type: 'boolean', default: true },
           deliveryMethod: { type: 'string', enum: ['DOWNLOAD', 'WEBEX'] },
           deliveryDestination: { type: 'string' },
+          targetCompanyName: { type: 'string' },
+          targetCompanyNames: { type: 'array', items: { type: 'string' } },
         },
       },
       response: {
@@ -60,7 +62,7 @@ export async function scheduleRoutes(app: FastifyInstance) {
           type: 'object',
           properties: {
             success: { type: 'boolean' },
-            data: { type: 'array', items: { type: 'object' } },
+            data: { type: 'array', items: { type: 'object', additionalProperties: true } },
             pagination: {
               type: 'object',
               properties: {
@@ -120,6 +122,8 @@ export async function scheduleRoutes(app: FastifyInstance) {
           timezone: { type: 'string' },
           deliveryMethod: { type: 'string', enum: ['DOWNLOAD', 'WEBEX'] },
           deliveryDestination: { type: 'string' },
+          targetCompanyName: { type: 'string' },
+          targetCompanyNames: { type: 'array', items: { type: 'string' } },
         },
       },
       response: {

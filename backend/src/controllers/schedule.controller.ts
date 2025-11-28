@@ -14,6 +14,8 @@ interface CreateScheduleBody {
   isActive?: boolean;
   deliveryMethod: DeliveryMethod;
   deliveryDestination?: string;
+  targetCompanyName?: string;
+  targetCompanyNames?: string[];
 }
 
 interface UpdateScheduleBody {
@@ -23,6 +25,8 @@ interface UpdateScheduleBody {
   timezone?: string;
   deliveryMethod?: DeliveryMethod;
   deliveryDestination?: string;
+  targetCompanyName?: string;
+  targetCompanyNames?: string[];
 }
 
 interface ListSchedulesQuery {
@@ -50,6 +54,8 @@ export class ScheduleController {
         isActive,
         deliveryMethod,
         deliveryDestination,
+        targetCompanyName,
+        targetCompanyNames,
       } = request.body;
 
       // Validate delivery method
@@ -73,6 +79,8 @@ export class ScheduleController {
         isActive,
         deliveryMethod,
         deliveryDestination,
+        targetCompanyName,
+        targetCompanyNames,
       });
 
       logger.info(`Schedule created by user ${userId}: ${schedule.id}`);
@@ -175,7 +183,7 @@ export class ScheduleController {
     try {
       const userId = (request as any).user.id;
       const { id } = request.params;
-      const { name, description, cronExpression, timezone, deliveryMethod, deliveryDestination } = request.body;
+      const { name, description, cronExpression, timezone, deliveryMethod, deliveryDestination, targetCompanyName, targetCompanyNames } = request.body;
 
       // Validate delivery method if provided
       if (deliveryMethod && !['DOWNLOAD', 'WEBEX'].includes(deliveryMethod)) {
@@ -195,6 +203,8 @@ export class ScheduleController {
         timezone,
         deliveryMethod,
         deliveryDestination,
+        targetCompanyName,
+        targetCompanyNames,
       });
 
       logger.info(`Schedule updated by user ${userId}: ${id}`);

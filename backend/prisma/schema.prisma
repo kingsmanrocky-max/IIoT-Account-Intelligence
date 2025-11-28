@@ -223,6 +223,10 @@ model Schedule {
   deliveryMethod  DeliveryMethod
   deliveryDestination String?
 
+  // Target company data for report generation
+  targetCompanyName   String?   // For ACCOUNT_INTELLIGENCE, COMPETITIVE_INTELLIGENCE
+  targetCompanyNames  Json?     // For NEWS_DIGEST (array of company names)
+
   lastRunAt       DateTime?
   nextRunAt       DateTime?
 

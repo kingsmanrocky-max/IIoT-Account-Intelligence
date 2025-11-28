@@ -15,7 +15,13 @@ import DepthSelector from '../reports/DepthSelector';
 import ProductSelector from '../reports/ProductSelector';
 import FocusAreaSelector from '../reports/FocusAreaSelector';
 import WebexDeliverySelector from '../reports/WebexDeliverySelector';
+import NewsFocusSelector from '../reports/NewsFocusSelector';
+import TimePeriodSelector from '../reports/TimePeriodSelector';
+import OutputStyleSelector from '../reports/OutputStyleSelector';
 import { WebexDeliveryOptions, DEFAULT_WEBEX_DELIVERY, validateWebexDestination } from '@/lib/constants/webex-delivery';
+import { DEFAULT_TIME_PERIOD, DEFAULT_OUTPUT_STYLE } from '@/lib/constants/news-digest';
+import { PodcastOptionsPanel } from '../podcast/PodcastOptionsPanel';
+import { PodcastOptions } from '@/lib/api';
 
 interface TemplateFormProps {
   template?: Template;
@@ -71,9 +77,29 @@ export default function TemplateForm({ template, onSubmit, onCancel, isLoading =
     return DEFAULT_WEBEX_DELIVERY;
   });
 
+  // Podcast options
+  const [podcastEnabled, setPodcastEnabled] = useState<boolean>(template?.configuration?.podcastOptions?.enabled || false);
+  const [podcastOptions, setPodcastOptions] = useState<PodcastOptions>(() => {
+    const opts = template?.configuration?.podcastOptions;
+    return {
+      template: opts?.template || 'EXECUTIVE_BRIEF',
+      duration: opts?.duration || 'STANDARD',
+      deliveryEnabled: opts?.deliveryEnabled || false,
+      deliveryDestination: opts?.deliveryDestination || '',
+      deliveryDestinationType: opts?.deliveryDestinationType || 'email',
+    };
+  });
+
+  // News Digest options
+  const [newsFocus, setNewsFocus] = useState<string[]>(template?.configuration?.newsDigestOptions?.newsFocus || []);
+  const [timePeriod, setTimePeriod] = useState(template?.configuration?.newsDigestOptions?.timePeriod || DEFAULT_TIME_PERIOD);
+  const [industryFilter, setIndustryFilter] = useState<string | null>(template?.configuration?.newsDigestOptions?.industryFilter || null);
+  const [outputStyle, setOutputStyle] = useState(template?.configuration?.newsDigestOptions?.outputStyle || DEFAULT_OUTPUT_STYLE);
+
   const [error, setError] = useState<string | null>(null);
 
   const isCompetitiveIntelligence = workflowType === 'COMPETITIVE_INTELLIGENCE';
+  const isNewsDigest = workflowType === 'NEWS_DIGEST';
 
   // Reset CI-specific fields when workflow changes
   useEffect(() => {
@@ -82,6 +108,16 @@ export default function TemplateForm({ template, onSubmit, onCancel, isLoading =
       setFocusIndustry(null);
     }
   }, [isCompetitiveIntelligence]);
+
+  // Reset News Digest fields when workflow changes
+  useEffect(() => {
+    if (!isNewsDigest) {
+      setNewsFocus([]);
+      setTimePeriod(DEFAULT_TIME_PERIOD);
+      setIndustryFilter(null);
+      setOutputStyle(DEFAULT_OUTPUT_STYLE);
+    }
+  }, [isNewsDigest]);
 
   const toggleFormat = (format: ReportFormat) => {
     setRequestedFormats((prev) =>
@@ -135,6 +171,15 @@ export default function TemplateForm({ template, onSubmit, onCancel, isLoading =
       };
     }
 
+    if (isNewsDigest) {
+      configuration.newsDigestOptions = {
+        newsFocus: newsFocus.length > 0 ? newsFocus : undefined,
+        timePeriod: timePeriod !== DEFAULT_TIME_PERIOD ? timePeriod : undefined,
+        industryFilter: industryFilter || undefined,
+        outputStyle: outputStyle !== DEFAULT_OUTPUT_STYLE ? outputStyle : undefined,
+      };
+    }
+
     if (webexDelivery.enabled) {
       configuration.delivery = {
         method: 'WEBEX',
@@ -142,6 +187,17 @@ export default function TemplateForm({ template, onSubmit, onCancel, isLoading =
         destinationType: webexDelivery.destinationType,
         contentType: webexDelivery.contentType,
         format: webexDelivery.contentType === 'ATTACHMENT' ? (requestedFormats[0] || 'PDF') : undefined,
+      };
+    }
+
+    if (podcastEnabled) {
+      configuration.podcastOptions = {
+        enabled: true,
+        template: podcastOptions.template,
+        duration: podcastOptions.duration,
+        deliveryEnabled: podcastOptions.deliveryEnabled,
+        deliveryDestination: podcastOptions.deliveryDestination,
+        deliveryDestinationType: podcastOptions.deliveryDestinationType,
       };
     }
 
@@ -273,6 +329,37 @@ export default function TemplateForm({ template, onSubmit, onCancel, isLoading =
           </div>
         )}
 
+        {/* News Digest Options */}
+        {isNewsDigest && (
+          <div className="space-y-6">
+            <NewsFocusSelector
+              selectedFocus={newsFocus}
+              onFocusChange={setNewsFocus}
+              disabled={isLoading}
+            />
+            <TimePeriodSelector
+              value={timePeriod}
+              onChange={setTimePeriod}
+              disabled={isLoading}
+            />
+            <div>
+              <label className="block text-sm font-medium text-meraki-gray-700 mb-1.5">
+                Industry Filter (optional)
+              </label>
+              <FocusAreaSelector
+                selectedIndustry={industryFilter}
+                onIndustryChange={setIndustryFilter}
+                disabled={isLoading}
+              />
+            </div>
+            <OutputStyleSelector
+              value={outputStyle}
+              onChange={setOutputStyle}
+              disabled={isLoading}
+            />
+          </div>
+        )}
+
         {/* Section Selector */}
         <SectionSelector
           workflowType={workflowType}
@@ -347,6 +434,31 @@ export default function TemplateForm({ template, onSubmit, onCancel, isLoading =
             )}
           </label>
         </div>
+      </div>
+
+      {/* Virtual Podcast Generation */}
+      <div>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={podcastEnabled}
+            onChange={(e) => setPodcastEnabled(e.target.checked)}
+            disabled={isLoading}
+            className="w-4 h-4 text-meraki-blue border-meraki-gray-300 rounded focus:ring-2 focus:ring-meraki-blue"
+          />
+          <span className="text-sm font-medium text-meraki-gray-700">
+            Generate Virtual Podcast
+          </span>
+        </label>
+        {podcastEnabled && (
+          <div className="mt-3">
+            <PodcastOptionsPanel
+              options={podcastOptions}
+              onChange={setPodcastOptions}
+              disabled={isLoading}
+            />
+          </div>
+        )}
       </div>
 
       {/* Webex Delivery */}

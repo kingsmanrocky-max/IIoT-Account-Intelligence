@@ -38,7 +38,8 @@ function formatDate(dateString: string | null | undefined): string {
   });
 }
 
-function describeCron(cron: string): string {
+function describeCron(cron: string | undefined | null): string {
+  if (!cron) return 'Not set';
   const parts = cron.split(' ');
   if (parts.length !== 5) return cron;
 

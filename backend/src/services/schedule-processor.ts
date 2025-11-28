@@ -123,23 +123,25 @@ export class ScheduleProcessor {
       const timestamp = new Date().toISOString().split('T')[0];
       const title = `${schedule.name} - ${timestamp}`;
 
-      // For scheduled reports, we need default company info
-      // This should come from the template's configuration or a default
-      // For now, we'll check if there's company info in additional context
-      let companyName: string | undefined;
-      let companyNames: string[] | undefined;
+      // Get target company data from schedule
+      let companyName = schedule.targetCompanyName;
+      let companyNames = schedule.targetCompanyNames as string[] | undefined;
 
-      // Check if we have default company settings in schedule or template
-      // These would need to be added to the schema/configuration
-      // For now, log a warning if not present
+      // Validate that required company data is present
       if (schedule.template.workflowType !== 'NEWS_DIGEST') {
-        // For AI and CI, we need a company name
-        // This is a limitation - scheduled reports need pre-configured targets
-        logger.warn(`Schedule ${schedule.id} may need company configuration for ${schedule.template.workflowType}`);
-        // Skip if no company configured
-        // In production, this would come from schedule configuration
-        await scheduleService.markScheduleExecuted(schedule.id);
-        return;
+        // Account Intelligence and Competitive Intelligence need a company name
+        if (!companyName) {
+          logger.warn(`Schedule ${schedule.id} missing targetCompanyName for ${schedule.template.workflowType}`);
+          await scheduleService.markScheduleExecuted(schedule.id);
+          return;
+        }
+      } else {
+        // News Digest needs company names array
+        if (!companyNames || companyNames.length === 0) {
+          logger.warn(`Schedule ${schedule.id} missing targetCompanyNames for NEWS_DIGEST`);
+          await scheduleService.markScheduleExecuted(schedule.id);
+          return;
+        }
       }
 
       // Apply template to create report

@@ -96,7 +96,9 @@ export class TemplateController {
         offset: offset ? parseInt(String(offset), 10) : undefined,
       });
 
-      return reply.send({
+      logger.info('Controller received from service:', { templates: JSON.stringify(templates), total });
+
+      const responseData = {
         success: true,
         data: templates,
         pagination: {
@@ -104,7 +106,11 @@ export class TemplateController {
           limit: limit || 20,
           offset: offset || 0,
         },
-      });
+      };
+
+      logger.info('Controller sending response:', { response: JSON.stringify(responseData) });
+
+      return reply.send(responseData);
     } catch (error) {
       logger.error('List templates error:', error);
       return reply.status(500).send({

@@ -80,6 +80,26 @@ export async function templateRoutes(app: FastifyInstance) {
               requestedFormats: {
                 type: 'array',
                 items: { type: 'string', enum: ['PDF', 'DOCX'] }
+              },
+              podcastOptions: {
+                type: 'object',
+                properties: {
+                  enabled: { type: 'boolean' },
+                  template: {
+                    type: 'string',
+                    enum: ['EXECUTIVE_BRIEF', 'STRATEGIC_DEBATE', 'INDUSTRY_PULSE']
+                  },
+                  duration: {
+                    type: 'string',
+                    enum: ['SHORT', 'STANDARD', 'LONG']
+                  },
+                  deliveryEnabled: { type: 'boolean' },
+                  deliveryDestination: { type: 'string' },
+                  deliveryDestinationType: {
+                    type: 'string',
+                    enum: ['email', 'roomId']
+                  }
+                }
               }
             }
           }
@@ -119,7 +139,7 @@ export async function templateRoutes(app: FastifyInstance) {
           type: 'object',
           properties: {
             success: { type: 'boolean' },
-            data: { type: 'array', items: { type: 'object' } },
+            data: { type: 'array', items: { type: 'object', additionalProperties: true } },
             pagination: {
               type: 'object',
               properties: {
