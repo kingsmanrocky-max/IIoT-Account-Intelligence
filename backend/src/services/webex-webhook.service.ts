@@ -62,6 +62,7 @@ class WebhookRateLimiter {
 
 export class WebexWebhookService {
   private rateLimiter = new WebhookRateLimiter();
+  private botEmail: string | null = null;
 
   /**
    * Main entry point for processing webhook payloads
@@ -78,6 +79,13 @@ export class WebexWebhookService {
 
     const messageData = payload.data;
     const senderEmail = messageData.personEmail;
+
+    // Filter out bot's own messages to prevent loops
+    const botEmail = await this.getBotEmail();
+    if (botEmail && senderEmail === botEmail) {
+      logger.debug('Ignoring bot own message', { senderEmail });
+      return;
+    }
 
     // Security: Cisco email check
     if (!this.isCiscoEmail(senderEmail)) {
@@ -109,9 +117,6 @@ export class WebexWebhookService {
       });
       return;
     }
-
-    // TODO: Filter out bot's own messages to prevent loops
-    // This requires knowing the bot's personId from Webex API
 
     // Parse user request with LLM
     const parsed = await this.parseUserRequest(message.text);
@@ -180,6 +185,53 @@ export class WebexWebhookService {
     // Strict domain check - only exact @cisco.com match (no subdomains)
     return normalizedEmail.endsWith('@cisco.com') &&
            normalizedEmail.split('@').length === 2;
+  }
+
+  /**
+   * Get bot's email address (cached after first call)
+   */
+  private async getBotEmail(): Promise<string | null> {
+    if (this.botEmail) {
+      return this.botEmail;
+    }
+
+    const adminService = getAdminService();
+    const settings = await adminService.getSettings();
+
+    if (!settings.webexBotToken) {
+      logger.error('Webex bot token not configured');
+      return null;
+    }
+
+    try {
+      const response = await fetch(
+        'https://webexapis.com/v1/people/me',
+        {
+          headers: {
+            Authorization: `Bearer ${settings.webexBotToken}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        logger.error('Failed to fetch bot info from Webex', {
+          status: response.status,
+          statusText: response.statusText
+        });
+        return null;
+      }
+
+      const data = await response.json() as any;
+      this.botEmail = data.emails?.[0] || null;
+
+      logger.info('Bot email cached', { botEmail: this.botEmail });
+      return this.botEmail;
+    } catch (error) {
+      logger.error('Error fetching bot info from Webex', {
+        error: error instanceof Error ? error.message : 'Unknown'
+      });
+      return null;
+    }
   }
 
   /**
