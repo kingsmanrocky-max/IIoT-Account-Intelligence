@@ -166,21 +166,18 @@ export default function AdminPromptsPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="space-y-8">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <MessageSquare className="h-8 w-8 text-blue-600" />
-              Prompt Management
-            </h1>
-            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+            <h1 className="text-2xl font-semibold text-meraki-gray-900">Prompt Management</h1>
+            <p className="text-meraki-gray-500 mt-1 text-sm">
               Manage AI prompts for reports and podcasts
             </p>
           </div>
           <button
             onClick={loadPrompts}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-meraki-blue text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
             <RefreshCw className="h-4 w-4" />
             Refresh
@@ -261,8 +258,8 @@ export default function AdminPromptsPage() {
                           {prompt.description}
                         </p>
                       )}
-                      <div className="text-xs text-gray-500 dark:text-gray-500 ml-7">
-                        Key: <code className="bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded">{prompt.key}</code>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 ml-7">
+                        Key: <code className="bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded text-gray-800 dark:text-gray-200">{prompt.key}</code>
                       </div>
 
                       {/* Expanded Details */}

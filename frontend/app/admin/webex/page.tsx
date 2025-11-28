@@ -24,7 +24,7 @@ export default function AdminWebexPage() {
   }
 
   // Calculate date range
-  const startDate = subDays(new Date(), timeRange).toISOString();
+  const startDate = subDays(new Date(), timeRange).toISOString().split('T')[0];
 
   // Fetch interactions
   const {
