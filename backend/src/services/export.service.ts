@@ -194,7 +194,15 @@ export class ExportService {
 
     const browser = await puppeteer.launch({
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--disable-software-rasterizer',
+        '--single-process',           // Required for containerized environments
+        '--no-zygote',               // Prevents fork issues in containers
+      ],
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
     });
 

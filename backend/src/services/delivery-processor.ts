@@ -133,10 +133,53 @@ export class DeliveryProcessor {
     try {
       const result = await webexService.deliverReport(deliveryId);
 
+      // Fetch delivery and report details for logging to WebexInteraction
+      const delivery = await prisma.reportDelivery.findUnique({
+        where: { id: deliveryId },
+        include: { report: true },
+      });
+
+      if (!delivery) {
+        logger.error(`Delivery ${deliveryId} not found after processing`);
+        return;
+      }
+
       if (result.success) {
         logger.info(`Delivery job completed: ${deliveryId}`);
+
+        // Log successful delivery to WebexInteraction feed
+        await prisma.webexInteraction.create({
+          data: {
+            userEmail: delivery.destination,
+            messageText: `Delivery completed for report: ${delivery.report.title}`,
+            workflowType: delivery.report.workflowType,
+            targetCompany: delivery.report.inputData?.companyName || null,
+            responseType: 'DELIVERY_SENT',
+            reportId: delivery.report.id,
+            success: true,
+            messageId: result.messageId || null,
+          },
+        });
+
+        logger.info(`WebexInteraction logged for successful delivery ${deliveryId}`);
       } else {
         logger.warn(`Delivery job failed: ${deliveryId} - ${result.error}`);
+
+        // Log failed delivery to WebexInteraction feed
+        await prisma.webexInteraction.create({
+          data: {
+            userEmail: delivery.destination,
+            messageText: `Delivery failed for report: ${delivery.report.title}`,
+            workflowType: delivery.report.workflowType,
+            targetCompany: delivery.report.inputData?.companyName || null,
+            responseType: 'DELIVERY_FAILED',
+            reportId: delivery.report.id,
+            success: false,
+            errorMessage: result.error || 'Unknown error',
+          },
+        });
+
+        logger.info(`WebexInteraction logged for failed delivery ${deliveryId}`);
       }
     } catch (error) {
       logger.error(`Delivery job error: ${deliveryId}`, error);
