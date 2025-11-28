@@ -1011,3 +1011,60 @@ export const promptAPI = {
       { key }
     ),
 };
+
+// Webex Admin Types
+export interface WebexInteraction {
+  id: string;
+  userEmail: string;
+  personId?: string;
+  roomId?: string;
+  messageText: string;
+  messageId?: string;
+  workflowType?: string;
+  targetCompany?: string;
+  additionalData?: Record<string, unknown>;
+  responseType: string;
+  responseText?: string;
+  reportId?: string;
+  success: boolean;
+  errorMessage?: string;
+  createdAt: string;
+}
+
+export interface WebexInteractionListParams {
+  page?: number;
+  limit?: number;
+  email?: string;
+  startDate?: string;
+  endDate?: string;
+  responseType?: string;
+  success?: boolean;
+}
+
+export interface WebexStats {
+  totalInteractions: number;
+  successCount: number;
+  failureCount: number;
+  successRate: number;
+  byResponseType: Array<{ responseType: string; count: number }>;
+}
+
+export interface WebexStatsParams {
+  startDate?: string;
+  endDate?: string;
+}
+
+// Webex Admin API (Admin only)
+export const webexAdminAPI = {
+  // List Webex bot interactions with pagination and filters
+  listInteractions: (params?: WebexInteractionListParams) =>
+    api.get<{
+      success: boolean;
+      data: WebexInteraction[];
+      pagination: { page: number; limit: number; total: number; totalPages: number };
+    }>('/admin/webex/interactions', { params }),
+
+  // Get aggregate statistics
+  getStats: (params?: WebexStatsParams) =>
+    api.get<{ success: boolean; data: WebexStats }>('/admin/webex/stats', { params }),
+};

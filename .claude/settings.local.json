@@ -87,7 +87,9 @@
       "Bash(timeout /t 10)",
       "Bash(docker compose:*)",
       "WebFetch(domain:docs.x.ai)",
-      "WebFetch(domain:platform.openai.com)"
+      "WebFetch(domain:platform.openai.com)",
+      "Bash(git reset:*)",
+      "Bash(timeout /t 15)"
     ],
     "deny": [],
     "ask": []

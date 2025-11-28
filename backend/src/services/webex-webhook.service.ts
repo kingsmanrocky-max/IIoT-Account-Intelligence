@@ -65,6 +65,51 @@ export class WebexWebhookService {
   private botEmail: string | null = null;
 
   /**
+   * Log Webex interaction to database
+   */
+  private async logInteraction(data: {
+    userEmail: string;
+    personId?: string;
+    roomId?: string;
+    messageText: string;
+    messageId?: string;
+    workflowType?: string;
+    targetCompany?: string;
+    additionalData?: any;
+    responseType: string;
+    responseText?: string;
+    reportId?: string;
+    success: boolean;
+    errorMessage?: string;
+  }): Promise<string | null> {
+    try {
+      const interaction = await prisma.webexInteraction.create({
+        data: {
+          userEmail: data.userEmail,
+          personId: data.personId,
+          roomId: data.roomId,
+          messageText: data.messageText,
+          messageId: data.messageId,
+          workflowType: data.workflowType,
+          targetCompany: data.targetCompany,
+          additionalData: data.additionalData as any,
+          responseType: data.responseType,
+          responseText: data.responseText,
+          reportId: data.reportId,
+          success: data.success,
+          errorMessage: data.errorMessage,
+        },
+      });
+      return interaction.id;
+    } catch (error) {
+      logger.error('Failed to log Webex interaction', {
+        error: error instanceof Error ? error.message : 'Unknown'
+      });
+      return null;
+    }
+  }
+
+  /**
    * Main entry point for processing webhook payloads
    */
   async processWebhook(payload: WebexWebhookPayload): Promise<void> {
@@ -92,8 +137,19 @@ export class WebexWebhookService {
       logger.warn('Non-Cisco email rejected', {
         domain: senderEmail.split('@')[1]
       });
-      await this.sendErrorReply(messageData,
-        'This service is only available for Cisco employees (@cisco.com).');
+      const errorMsg = 'This service is only available for Cisco employees (@cisco.com).';
+      await this.sendErrorReply(messageData, errorMsg);
+      await this.logInteraction({
+        userEmail: senderEmail,
+        personId: messageData.personId,
+        roomId: messageData.roomType === 'group' ? messageData.roomId : undefined,
+        messageText: '[Message not fetched - non-Cisco email]',
+        messageId: messageData.id,
+        responseType: 'ERROR',
+        responseText: errorMsg,
+        success: false,
+        errorMessage: 'Non-Cisco email domain',
+      });
       return;
     }
 
@@ -103,8 +159,19 @@ export class WebexWebhookService {
       logger.warn('Webhook rate limit exceeded', {
         domain: senderEmail.split('@')[1]
       });
-      await this.sendErrorReply(messageData,
-        `Rate limit exceeded. Please wait ${waitTime} seconds before trying again.`);
+      const errorMsg = `Rate limit exceeded. Please wait ${waitTime} seconds before trying again.`;
+      await this.sendErrorReply(messageData, errorMsg);
+      await this.logInteraction({
+        userEmail: senderEmail,
+        personId: messageData.personId,
+        roomId: messageData.roomType === 'group' ? messageData.roomId : undefined,
+        messageText: '[Message not fetched - rate limited]',
+        messageId: messageData.id,
+        responseType: 'RATE_LIMITED',
+        responseText: errorMsg,
+        success: false,
+        errorMessage: `Rate limit: ${waitTime}s remaining`,
+      });
       return;
     }
 
@@ -123,15 +190,46 @@ export class WebexWebhookService {
 
     if (isParseError(parsed)) {
       // Send clarification request
+      const clarificationMsg = `I'd be happy to help! ${parsed.error}
+
+Try something like:
+- "Account report for Microsoft"
+- "Competitive analysis of Siemens"
+- "News digest for Apple, Google, Amazon"`;
       await this.sendClarificationRequest(messageData, parsed.error);
+      await this.logInteraction({
+        userEmail: senderEmail,
+        personId: messageData.personId,
+        roomId: messageData.roomType === 'group' ? messageData.roomId : undefined,
+        messageText: message.text,
+        messageId: messageData.id,
+        responseType: 'ERROR',
+        responseText: clarificationMsg,
+        success: false,
+        errorMessage: `Parse error: ${parsed.error}`,
+      });
       return;
     }
 
     // Validate parsed request
     const validation = this.validateParsedRequest(parsed);
     if (!validation.valid) {
-      await this.sendErrorReply(messageData,
-        `Invalid request: ${validation.errors.join(', ')}`);
+      const errorMsg = `Invalid request: ${validation.errors.join(', ')}`;
+      await this.sendErrorReply(messageData, errorMsg);
+      await this.logInteraction({
+        userEmail: senderEmail,
+        personId: messageData.personId,
+        roomId: messageData.roomType === 'group' ? messageData.roomId : undefined,
+        messageText: message.text,
+        messageId: messageData.id,
+        workflowType: parsed.workflowType,
+        targetCompany: parsed.targetCompany,
+        additionalData: parsed.additionalCompanies ? { additionalCompanies: parsed.additionalCompanies } : undefined,
+        responseType: 'ERROR',
+        responseText: errorMsg,
+        success: false,
+        errorMessage: validation.errors.join(', '),
+      });
       return;
     }
 
@@ -141,14 +239,29 @@ export class WebexWebhookService {
 
     // Block if confidence is too low
     if (companyValidation.confidence < 0.7) {
-      await this.sendErrorReply(
-        messageData,
-        `I couldn't confidently identify the company "${parsed.targetCompany}". ` +
-        `Could you please provide a more specific company name or additional details?`
-      );
+      const errorMsg = `I couldn't confidently identify the company "${parsed.targetCompany}". ` +
+        `Could you please provide a more specific company name or additional details?`;
+      await this.sendErrorReply(messageData, errorMsg);
       logger.info('Company validation failed - low confidence', {
         companyName: parsed.targetCompany,
         confidence: companyValidation.confidence
+      });
+      await this.logInteraction({
+        userEmail: senderEmail,
+        personId: messageData.personId,
+        roomId: messageData.roomType === 'group' ? messageData.roomId : undefined,
+        messageText: message.text,
+        messageId: messageData.id,
+        workflowType: parsed.workflowType,
+        targetCompany: parsed.targetCompany,
+        additionalData: {
+          additionalCompanies: parsed.additionalCompanies,
+          confidence: companyValidation.confidence,
+        },
+        responseType: 'INVALID_COMPANY',
+        responseText: errorMsg,
+        success: false,
+        errorMessage: `Low confidence: ${companyValidation.confidence}`,
       });
       return;
     }
@@ -641,6 +754,10 @@ Your first report is being generated now!`;
 
     const workflowLabel = workflowLabels[parsed.workflowType] || parsed.workflowType;
 
+    // Get message text for logging (should have been fetched already in processWebhook)
+    const message = await this.fetchMessageContent(messageData.id);
+    const messageText = message?.text || '[Message text not available]';
+
     try {
       const report = await reportService.createReport({
         userId: user.id,
@@ -667,12 +784,51 @@ Your first report is being generated now!`;
         workflowType: parsed.workflowType,
         userId: user.id
       });
+
+      // Log successful interaction
+      const acknowledgmentMsg = `Generating **${workflowLabel}** report for **${parsed.targetCompany}**. I'll send it when ready (2-3 minutes).`;
+      await this.logInteraction({
+        userEmail: messageData.personEmail,
+        personId: messageData.personId,
+        roomId: messageData.roomType === 'group' ? messageData.roomId : undefined,
+        messageText,
+        messageId: messageData.id,
+        workflowType: parsed.workflowType,
+        targetCompany: parsed.targetCompany,
+        additionalData: {
+          additionalCompanies: parsed.additionalCompanies,
+          depth: parsed.depth,
+        },
+        responseType: 'REPORT_CREATED',
+        responseText: acknowledgmentMsg,
+        reportId: report.id,
+        success: true,
+      });
     } catch (error) {
       logger.error('Failed to create report from webhook', {
         error: error instanceof Error ? error.message : 'Unknown'
       });
-      await this.sendErrorReply(messageData,
-        'Failed to create your report. Please try again later.');
+      const errorMsg = 'Failed to create your report. Please try again later.';
+      await this.sendErrorReply(messageData, errorMsg);
+
+      // Log failed interaction
+      await this.logInteraction({
+        userEmail: messageData.personEmail,
+        personId: messageData.personId,
+        roomId: messageData.roomType === 'group' ? messageData.roomId : undefined,
+        messageText,
+        messageId: messageData.id,
+        workflowType: parsed.workflowType,
+        targetCompany: parsed.targetCompany,
+        additionalData: {
+          additionalCompanies: parsed.additionalCompanies,
+          depth: parsed.depth,
+        },
+        responseType: 'ERROR',
+        responseText: errorMsg,
+        success: false,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
   }
 }

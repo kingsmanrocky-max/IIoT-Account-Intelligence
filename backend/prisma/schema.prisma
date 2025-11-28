@@ -464,3 +464,27 @@ model PromptVersion {
   @@unique([promptConfigId, version])
   @@index([promptConfigId])
 }
+
+// Webex Bot Interaction Tracking
+model WebexInteraction {
+  id              String    @id @default(uuid())
+  userEmail       String
+  personId        String?
+  roomId          String?
+  messageText     String
+  messageId       String?
+  workflowType    String?
+  targetCompany   String?
+  additionalData  Json?
+  responseType    String
+  responseText    String?
+  reportId        String?
+  success         Boolean
+  errorMessage    String?
+  createdAt       DateTime  @default(now())
+
+  @@index([userEmail])
+  @@index([createdAt])
+  @@index([responseType])
+  @@index([success])
+}

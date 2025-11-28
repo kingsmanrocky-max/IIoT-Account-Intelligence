@@ -6,6 +6,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { StatCard, AreaLineChart, DonutChart, ActivityFeed } from '@/components/charts';
 import {
   analyticsAPI,
+  webexAdminAPI,
   DashboardSummary,
   ReportTrend,
   WorkflowDistribution,
@@ -22,6 +23,7 @@ import {
   TrendingUp,
   AlertCircle,
   Loader2,
+  MessageSquare,
 } from 'lucide-react';
 
 const WORKFLOW_COLORS: Record<string, string> = {
@@ -96,6 +98,16 @@ export default function AnalyticsPage() {
     queryKey: ['analytics-top-users'],
     queryFn: async () => {
       const response = await analyticsAPI.getTopUsers({ limit: 5, period: 'month' });
+      return response.data.data;
+    },
+    enabled: isAdmin,
+  });
+
+  const { data: webexStatsData, isLoading: webexStatsLoading } = useQuery({
+    queryKey: ['webex-stats-analytics', timeRange],
+    queryFn: async () => {
+      const { startDate } = getDateRange();
+      const response = await webexAdminAPI.getStats({ startDate });
       return response.data.data;
     },
     enabled: isAdmin,
@@ -193,6 +205,12 @@ export default function AnalyticsPage() {
                     value={dashboardData?.totalUsers || 0}
                     subtitle={`${dashboardData?.activeUsers || 0} active`}
                     icon={Users}
+                  />
+                  <StatCard
+                    title="Webex Bot Requests"
+                    value={webexStatsData?.totalInteractions || 0}
+                    subtitle={`${webexStatsData?.successRate?.toFixed(1) || 0}% success rate`}
+                    icon={MessageSquare}
                   />
                   <StatCard
                     title="Failed Reports"

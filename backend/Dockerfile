@@ -1,10 +1,7 @@
 # Multi-stage build for optimized production image
-FROM node:20-alpine AS builder
+FROM node:20-slim AS builder
 
 WORKDIR /app
-
-# Install OpenSSL and other dependencies for Prisma
-RUN apk add --no-cache libc6-compat openssl
 
 # Copy package files
 COPY package*.json ./
@@ -23,12 +20,31 @@ RUN npx prisma generate
 RUN npm run build
 
 # Production stage
-FROM node:20-alpine AS runner
+FROM node:20-slim AS runner
 
 WORKDIR /app
 
-# Install FFmpeg for podcast audio processing and OpenSSL for Prisma
-RUN apk add --no-cache ffmpeg libc6-compat openssl
+# Install dependencies for Puppeteer, FFmpeg, and Prisma
+# - Chromium and its dependencies for PDF generation via Puppeteer
+# - FFmpeg for podcast audio processing
+# - OpenSSL for Prisma
+RUN apt-get update && apt-get install -y \
+    chromium \
+    chromium-sandbox \
+    fonts-ipafont-gothic \
+    fonts-wqy-zenhei \
+    fonts-thai-tlwg \
+    fonts-kacst \
+    fonts-freefont-ttf \
+    libxss1 \
+    ffmpeg \
+    openssl \
+    ca-certificates \
+    --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
+
+# Tell Puppeteer to use installed Chromium
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 # Copy built application and dependencies from builder
 COPY --from=builder /app/dist ./dist
@@ -40,8 +56,8 @@ COPY --from=builder /app/prisma ./prisma
 RUN mkdir -p /app/storage/reports /app/storage/podcasts /app/logs
 
 # Set non-root user for security
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001 && \
+RUN groupadd -g 1001 nodejs && \
+    useradd -u 1001 -g nodejs -s /bin/bash nodejs && \
     chown -R nodejs:nodejs /app
 
 USER nodejs

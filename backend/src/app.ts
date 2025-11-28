@@ -14,6 +14,7 @@ import { analyticsRoutes } from './routes/analytics.routes';
 import { podcastRoutes } from './routes/podcast.routes';
 import { promptRoutes } from './routes/prompt.routes';
 import webhookRoutes from './routes/webhook.routes';
+import { webexAdminRoutes } from './routes/webex-admin.routes';
 
 export async function createApp(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -89,6 +90,7 @@ export async function createApp(): Promise<FastifyInstance> {
   await app.register(analyticsRoutes, { prefix: '/api/analytics' });
   await app.register(podcastRoutes, { prefix: '/api' }); // Podcast routes at /api level for /api/reports/:id/podcast
   await app.register(webhookRoutes, { prefix: '/api/webhooks' });
+  await app.register(webexAdminRoutes, { prefix: '/api/admin/webex' });
 
   // 404 handler
   app.setNotFoundHandler((request, reply) => {
