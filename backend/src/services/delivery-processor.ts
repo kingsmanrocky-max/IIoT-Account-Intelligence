@@ -148,12 +148,13 @@ export class DeliveryProcessor {
         logger.info(`Delivery job completed: ${deliveryId}`);
 
         // Log successful delivery to WebexInteraction feed
+        const inputData = delivery.report.inputData as any;
         await prisma.webexInteraction.create({
           data: {
             userEmail: delivery.destination,
             messageText: `Delivery completed for report: ${delivery.report.title}`,
             workflowType: delivery.report.workflowType,
-            targetCompany: delivery.report.inputData?.companyName || null,
+            targetCompany: inputData?.companyName || null,
             responseType: 'DELIVERY_SENT',
             reportId: delivery.report.id,
             success: true,
@@ -166,12 +167,13 @@ export class DeliveryProcessor {
         logger.warn(`Delivery job failed: ${deliveryId} - ${result.error}`);
 
         // Log failed delivery to WebexInteraction feed
+        const inputData = delivery.report.inputData as any;
         await prisma.webexInteraction.create({
           data: {
             userEmail: delivery.destination,
             messageText: `Delivery failed for report: ${delivery.report.title}`,
             workflowType: delivery.report.workflowType,
-            targetCompany: delivery.report.inputData?.companyName || null,
+            targetCompany: inputData?.companyName || null,
             responseType: 'DELIVERY_FAILED',
             reportId: delivery.report.id,
             success: false,
