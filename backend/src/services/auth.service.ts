@@ -5,6 +5,7 @@ import { config } from '../config/env';
 import { logger } from '../utils/logger';
 import { User } from '@prisma/client';
 import { getActivityTrackingService } from './activity-tracking.service';
+import { getWebexDeliveryService } from './webex-delivery.service';
 
 interface LoginResult {
   user: Omit<User, 'passwordHash'>;
@@ -16,6 +17,12 @@ interface RegisterData {
   password: string;
   firstName?: string;
   lastName?: string;
+}
+
+interface AccountRequestData {
+  name: string;
+  email: string;
+  reason: string;
 }
 
 export class AuthService {
@@ -244,6 +251,51 @@ export class AuthService {
       logger.error('Change password error:', error);
       throw error;
     }
+  }
+
+  /**
+   * Send account request to Webex room
+   */
+  async sendAccountRequest(data: AccountRequestData): Promise<void> {
+    try {
+      const message = this.buildAccountRequestMessage(data);
+      const roomId = '98df5cb0-c315-11f0-bcbc-edbb730802e7';
+
+      const webexService = getWebexDeliveryService();
+      await webexService.sendWebexMessage(roomId, message, 'roomId');
+
+      logger.info(`Account request sent to Webex for: ${data.email}`);
+    } catch (error) {
+      logger.error('Send account request error:', error);
+      throw new Error('Failed to send account request');
+    }
+  }
+
+  /**
+   * Build formatted message for account request
+   */
+  private buildAccountRequestMessage(data: AccountRequestData): string {
+    const timestamp = new Date().toLocaleString('en-US', {
+      timeZone: 'UTC',
+      dateStyle: 'long',
+      timeStyle: 'short',
+    });
+
+    return `
+# New Account Request
+
+**Timestamp:** ${timestamp}
+
+**Requester Information:**
+- **Name:** ${data.name}
+- **Email:** ${data.email}
+
+**Reason for Request:**
+${data.reason}
+
+---
+*This request was submitted through the IIoT Account Intelligence platform.*
+    `.trim();
   }
 }
 

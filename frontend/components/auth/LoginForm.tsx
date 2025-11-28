@@ -54,9 +54,9 @@ export default function LoginForm() {
           </div>
           <h2 className="text-2xl font-semibold text-meraki-gray-900">Sign in to your account</h2>
           <p className="mt-2 text-sm text-meraki-gray-500">
-            Or{' '}
-            <Link href="/register" className="font-medium text-meraki-blue hover:text-meraki-blue-dark">
-              create a new account
+            Need access?{' '}
+            <Link href="/request-account" className="font-medium text-meraki-blue hover:text-meraki-blue-dark">
+              Request an account
             </Link>
           </p>
         </div>

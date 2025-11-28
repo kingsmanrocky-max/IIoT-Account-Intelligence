@@ -20,6 +20,12 @@ interface ChangePasswordBody {
   newPassword: string;
 }
 
+interface RequestAccountBody {
+  name: string;
+  email: string;
+  reason: string;
+}
+
 export class AuthController {
   /**
    * Register new user
@@ -273,6 +279,91 @@ export class AuthController {
         error: {
           code: 'INTERNAL_ERROR',
           message: 'Failed to change password',
+        },
+      });
+    }
+  }
+
+  /**
+   * Request account access
+   * POST /api/auth/request-account
+   */
+  async requestAccount(
+    request: FastifyRequest<{ Body: RequestAccountBody }>,
+    reply: FastifyReply
+  ) {
+    try {
+      const { name, email, reason } = request.body;
+
+      // Basic validation
+      if (!name || !email || !reason) {
+        return reply.status(400).send({
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Name, email, and reason are required',
+          },
+        });
+      }
+
+      // Name validation
+      if (name.length < 2) {
+        return reply.status(400).send({
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Name must be at least 2 characters',
+          },
+        });
+      }
+
+      // Email format validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return reply.status(400).send({
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Invalid email format',
+          },
+        });
+      }
+
+      // Reason validation
+      if (reason.length < 20) {
+        return reply.status(400).send({
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Please provide a more detailed reason (at least 20 characters)',
+          },
+        });
+      }
+
+      if (reason.length > 500) {
+        return reply.status(400).send({
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Reason must be less than 500 characters',
+          },
+        });
+      }
+
+      await authService.sendAccountRequest({ name, email, reason });
+
+      return reply.status(200).send({
+        success: true,
+        message: 'Account request submitted successfully',
+      });
+    } catch (error: any) {
+      logger.error('Request account error:', error);
+
+      return reply.status(500).send({
+        success: false,
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Failed to submit account request',
         },
       });
     }
