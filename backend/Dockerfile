@@ -30,7 +30,6 @@ WORKDIR /app
 # - OpenSSL for Prisma
 RUN apt-get update && apt-get install -y \
     chromium \
-    chromium-sandbox \
     fonts-ipafont-gothic \
     fonts-wqy-zenhei \
     fonts-thai-tlwg \
@@ -45,6 +44,8 @@ RUN apt-get update && apt-get install -y \
 
 # Tell Puppeteer to use installed Chromium
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+# Skip Chromium download during npm install (use system chromium)
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 
 # Copy built application and dependencies from builder
 COPY --from=builder /app/dist ./dist
@@ -59,6 +60,12 @@ RUN mkdir -p /app/storage/reports /app/storage/podcasts /app/logs
 RUN groupadd -g 1001 nodejs && \
     useradd -u 1001 -g nodejs -s /bin/bash nodejs && \
     chown -R nodejs:nodejs /app
+
+# Fix for Chromium running as non-root: give nodejs user access to /tmp for crash handler
+RUN mkdir -p /tmp/.X11-unix && \
+    chmod 1777 /tmp/.X11-unix && \
+    mkdir -p /home/nodejs && \
+    chown -R nodejs:nodejs /home/nodejs
 
 USER nodejs
 
