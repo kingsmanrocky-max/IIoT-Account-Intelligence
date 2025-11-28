@@ -40,7 +40,7 @@ export default function AdminWebexPage() {
         startDate,
       };
       const response = await webexAdminAPI.listInteractions(params);
-      return response.data.data;
+      return response.data;
     },
   });
 
@@ -58,9 +58,9 @@ export default function AdminWebexPage() {
   });
 
   const stats = statsData;
-  const interactions = interactionsData?.interactions || [];
-  const total = interactionsData?.total || 0;
-  const totalPages = interactionsData?.totalPages || 1;
+  const interactions = interactionsData?.data || [];
+  const total = interactionsData?.pagination.total || 0;
+  const totalPages = interactionsData?.pagination.totalPages || 1;
 
   return (
     <DashboardLayout>
