@@ -135,8 +135,36 @@ export class WebexWebhookService {
       return;
     }
 
+    // Validate company name using LLM enrichment
+    logger.info('Validating company name', { companyName: parsed.targetCompany });
+    const companyValidation = await this.validateCompany(parsed.targetCompany);
+
+    // Block if confidence is too low
+    if (companyValidation.confidence < 0.7) {
+      await this.sendErrorReply(
+        messageData,
+        `I couldn't confidently identify the company "${parsed.targetCompany}". ` +
+        `Could you please provide a more specific company name or additional details?`
+      );
+      logger.info('Company validation failed - low confidence', {
+        companyName: parsed.targetCompany,
+        confidence: companyValidation.confidence
+      });
+      return;
+    }
+
+    // Update parsed request with validated company name
+    parsed.targetCompany = companyValidation.validatedName;
+
+    logger.info('Company validated successfully', {
+      originalName: parsed.targetCompany,
+      validatedName: companyValidation.validatedName,
+      confidence: companyValidation.confidence,
+      industry: companyValidation.industry
+    });
+
     // Send confirmation message (best guess + confirm)
-    const confirmed = await this.sendConfirmation(messageData, parsed);
+    const confirmed = await this.sendConfirmation(messageData, parsed, companyValidation);
     if (!confirmed) {
       // User needs to confirm - we'll handle that in a future webhook event
       // For now, just wait for user to reply "yes"
@@ -232,6 +260,26 @@ export class WebexWebhookService {
       });
       return null;
     }
+  }
+
+  /**
+   * Validate company name using LLM enrichment
+   */
+  private async validateCompany(companyName: string): Promise<{
+    validatedName: string;
+    confidence: number;
+    description: string;
+    industry: string;
+  }> {
+    const llmService = getLLMService();
+    const enriched = await llmService.enrichCompanyData(companyName);
+
+    return {
+      validatedName: (enriched.validatedName as string) || companyName,
+      confidence: (enriched.confidence as number) || 0,
+      description: (enriched.description as string) || 'No description available',
+      industry: (enriched.industry as string) || 'Unknown',
+    };
   }
 
   /**
@@ -418,7 +466,13 @@ Examples:
    */
   private async sendConfirmation(
     messageData: WebexWebhookMessageData,
-    parsed: ParsedReportRequest
+    parsed: ParsedReportRequest,
+    companyValidation?: {
+      validatedName: string;
+      confidence: number;
+      description: string;
+      industry: string;
+    }
   ): Promise<boolean> {
     const webexService = getWebexDeliveryService();
 
@@ -431,6 +485,14 @@ Examples:
     const workflowLabel = workflowLabels[parsed.workflowType] || parsed.workflowType;
 
     let message = `I'll generate an **${workflowLabel}** report for **${parsed.targetCompany}**.`;
+
+    // Add validated company info if available
+    if (companyValidation) {
+      message += `\n\n**Industry:** ${companyValidation.industry}`;
+      if (companyValidation.description) {
+        message += `\n**About:** ${companyValidation.description}`;
+      }
+    }
 
     if (parsed.additionalCompanies && parsed.additionalCompanies.length > 0) {
       message += `\n\nIncluding: ${parsed.additionalCompanies.join(', ')}`;
@@ -585,13 +647,14 @@ Your first report is being generated now!`;
           companyNames: parsed.additionalCompanies,
         },
         depth: parsed.depth || 'standard',
+        requestedFormats: ['PDF'], // Request PDF generation for attachment
         delivery: {
           method: 'WEBEX',
           destination: messageData.roomType === 'direct'
             ? messageData.personEmail
             : messageData.roomId,
           destinationType: messageData.roomType === 'direct' ? 'email' : 'roomId',
-          contentType: 'SUMMARY_LINK',
+          contentType: 'ATTACHMENT', // Changed from SUMMARY_LINK to include PDF attachment
         }
       });
 
