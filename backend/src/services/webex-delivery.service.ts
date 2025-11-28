@@ -22,20 +22,41 @@ const WEBEX_API_BASE_URL = 'https://webexapis.com/v1';
 export class WebexDeliveryService {
   // Process a pending delivery record
   async deliverReport(deliveryId: string): Promise<WebexDeliveryResult> {
+    logger.info('Attempting to deliver report via Webex', { deliveryId });
+
     const delivery = await prisma.reportDelivery.findUnique({
       where: { id: deliveryId },
       include: { report: true },
     });
 
     if (!delivery) {
+      logger.error('Delivery record not found', { deliveryId });
       throw new WebexDeliveryError('Delivery not found', 'INVALID_DESTINATION', false);
     }
 
+    logger.info('Delivery record loaded', {
+      deliveryId,
+      reportId: delivery.reportId,
+      status: delivery.status,
+      method: delivery.method,
+      contentType: delivery.contentType,
+      destination: delivery.destination,
+      destinationType: delivery.destinationType,
+    });
+
     if (delivery.status !== 'PENDING') {
+      logger.warn('Delivery is not in PENDING status', {
+        deliveryId,
+        currentStatus: delivery.status,
+      });
       throw new WebexDeliveryError('Delivery is not pending', 'INVALID_DESTINATION', false);
     }
 
     if (delivery.method !== 'WEBEX') {
+      logger.error('Delivery method is not WEBEX', {
+        deliveryId,
+        method: delivery.method,
+      });
       throw new WebexDeliveryError('Delivery method is not WEBEX', 'INVALID_DESTINATION', false);
     }
 
@@ -44,6 +65,7 @@ export class WebexDeliveryService {
     const settings = await adminService.getSettings();
 
     if (!settings.webexBotToken) {
+      logger.error('Webex bot token not configured');
       throw new WebexDeliveryError('Webex bot token not configured', 'AUTH_FAILED', false);
     }
 
@@ -51,12 +73,21 @@ export class WebexDeliveryService {
       let messageResponse: WebexMessageResponse;
 
       if (delivery.contentType === 'ATTACHMENT') {
+        logger.info('Sending report with attachment', {
+          deliveryId,
+          reportId: delivery.reportId,
+          format: delivery.format,
+        });
         messageResponse = await this.sendWithAttachment(
           delivery,
           delivery.report,
           settings.webexBotToken
         );
       } else {
+        logger.info('Sending report with summary link', {
+          deliveryId,
+          reportId: delivery.reportId,
+        });
         messageResponse = await this.sendWithSummaryLink(
           delivery,
           delivery.report,
@@ -118,6 +149,11 @@ export class WebexDeliveryService {
     const exportService = getExportService();
     const format = (delivery.format || 'PDF') as ReportFormat;
 
+    logger.info('Attempting to get export file for attachment', {
+      reportId: report.id,
+      format,
+    });
+
     // Get export file
     const download = await exportService.getDownloadStream(
       report.id,
@@ -126,9 +162,15 @@ export class WebexDeliveryService {
     );
 
     if (!download) {
+      logger.warn('Export file not ready, triggering export generation', {
+        reportId: report.id,
+        format,
+      });
+
       // Try to trigger export if not ready
       await exportService.requestExport(report.id, report.userId, format, 'EAGER');
 
+      logger.info('Waiting 5 seconds for export to generate...');
       // Wait a bit and retry
       await this.sleep(5000);
 
@@ -137,6 +179,12 @@ export class WebexDeliveryService {
         format,
         report.userId
       );
+
+      logger.info('Retry download result', {
+        reportId: report.id,
+        format,
+        available: !!retryDownload,
+      });
 
       if (!retryDownload) {
         throw new WebexDeliveryError('Export not ready after retry', 'EXPORT_NOT_READY', true);

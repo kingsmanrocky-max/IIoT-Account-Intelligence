@@ -299,7 +299,15 @@ export class ReportService {
       // Create delivery record if Webex delivery was requested
       const deliveryConfig = (report.configuration as any)?.delivery as DeliveryOptions | undefined;
       if (deliveryConfig && deliveryConfig.method === 'WEBEX') {
-        await prisma.reportDelivery.create({
+        logger.info('Creating Webex delivery record', {
+          reportId,
+          destination: deliveryConfig.destination,
+          destinationType: deliveryConfig.destinationType,
+          contentType: deliveryConfig.contentType,
+          format: deliveryConfig.format || 'PDF',
+        });
+
+        const deliveryRecord = await prisma.reportDelivery.create({
           data: {
             reportId,
             method: 'WEBEX',
@@ -310,7 +318,19 @@ export class ReportService {
             status: 'PENDING',
           },
         });
-        logger.info(`Webex delivery scheduled for report ${reportId}`);
+
+        logger.info('Webex delivery record created successfully', {
+          deliveryId: deliveryRecord.id,
+          reportId,
+          status: deliveryRecord.status,
+        });
+      } else if (deliveryConfig) {
+        logger.debug('Delivery config present but not WEBEX method', {
+          reportId,
+          method: deliveryConfig.method,
+        });
+      } else {
+        logger.debug('No delivery config found for report', { reportId });
       }
 
       // Trigger podcast generation if podcast was requested

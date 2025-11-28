@@ -86,13 +86,31 @@ export class DeliveryProcessor {
       take: availableSlots,
     });
 
+    if (pendingJobs.length > 0) {
+      logger.info(`Found ${pendingJobs.length} pending WEBEX delivery job(s)`, {
+        jobs: pendingJobs.map(j => ({
+          id: j.id,
+          reportId: j.reportId,
+          destination: j.destination,
+          contentType: j.contentType,
+        })),
+      });
+    }
+
     // Process each job
     for (const job of pendingJobs) {
       if (this.processing.has(job.id)) {
+        logger.debug(`Delivery ${job.id} already processing, skipping`);
         continue;
       }
 
       this.processing.add(job.id);
+      logger.info(`Starting delivery processing`, {
+        deliveryId: job.id,
+        reportId: job.reportId,
+        destination: job.destination,
+      });
+
       this.processJob(job.id)
         .catch((err) => {
           logger.error(`Failed to process delivery ${job.id}:`, err);

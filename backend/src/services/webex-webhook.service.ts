@@ -163,22 +163,6 @@ export class WebexWebhookService {
       industry: companyValidation.industry
     });
 
-    // Send confirmation message (best guess + confirm)
-    const confirmed = await this.sendConfirmation(messageData, parsed, companyValidation);
-    if (!confirmed) {
-      // User needs to confirm - we'll handle that in a future webhook event
-      // For now, just wait for user to reply "yes"
-      // TODO: Implement conversation state management for confirmation flow
-      logger.info('Waiting for user confirmation', {
-        personEmail: senderEmail,
-        parsedRequest: {
-          company: parsed.targetCompany,
-          workflowType: parsed.workflowType
-        }
-      });
-      return;
-    }
-
     // Find or create user
     const user = await this.findOrCreateCiscoUser(senderEmail);
     if (!user) {
@@ -187,8 +171,8 @@ export class WebexWebhookService {
       return;
     }
 
-    // Send acknowledgment
-    await this.sendAcknowledgment(messageData, parsed);
+    // Send single acknowledgment with validation details
+    await this.sendAcknowledgment(messageData, parsed, companyValidation);
 
     // Create report
     await this.createReport(user, parsed, messageData);
@@ -520,11 +504,17 @@ Examples:
   }
 
   /**
-   * Send acknowledgment message
+   * Send acknowledgment message with validation details
    */
   private async sendAcknowledgment(
     messageData: WebexWebhookMessageData,
-    parsed: ParsedReportRequest
+    parsed: ParsedReportRequest,
+    companyValidation?: {
+      validatedName: string;
+      confidence: number;
+      description: string;
+      industry: string;
+    }
   ): Promise<void> {
     const webexService = getWebexDeliveryService();
 
@@ -536,7 +526,21 @@ Examples:
 
     const workflowLabel = workflowLabels[parsed.workflowType] || parsed.workflowType;
 
-    const message = `**Got it!** Generating your ${workflowLabel} report now. I'll send it when ready (2-3 minutes).`;
+    let message = `Generating **${workflowLabel}** report for **${parsed.targetCompany}**.`;
+
+    // Add validated company info if available
+    if (companyValidation) {
+      message += `\n\n**Industry:** ${companyValidation.industry}`;
+      if (companyValidation.description) {
+        message += `\n**About:** ${companyValidation.description}`;
+      }
+    }
+
+    if (parsed.additionalCompanies && parsed.additionalCompanies.length > 0) {
+      message += `\n\nIncluding: ${parsed.additionalCompanies.join(', ')}`;
+    }
+
+    message += `\n\nI'll send it when ready (2-3 minutes).`;
 
     const destination = messageData.roomType === 'direct'
       ? messageData.personEmail
