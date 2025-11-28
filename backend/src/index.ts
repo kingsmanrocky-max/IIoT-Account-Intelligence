@@ -7,6 +7,7 @@ import { getDeliveryProcessor } from './services/delivery-processor';
 import { getScheduleProcessor } from './services/schedule-processor';
 import { getCleanupProcessor } from './services/cleanup-processor';
 import { getPodcastProcessor } from './services/podcast-processor';
+import { getPromptSeedService } from './services/prompt-seed.service';
 
 async function start() {
   try {
@@ -17,6 +18,17 @@ async function start() {
     // Test database connection
     await prisma.$connect();
     logger.info('✓ Database connected successfully');
+
+    // Seed default prompts if none exist (first-run initialization)
+    try {
+      const promptSeedService = getPromptSeedService();
+      const result = await promptSeedService.seedDefaultPrompts();
+      if (result.created > 0) {
+        logger.info(`✓ Seeded ${result.created} default prompts`);
+      }
+    } catch (error) {
+      logger.warn('Failed to seed default prompts (non-fatal):', error);
+    }
 
     // Create Fastify app
     const app = await createApp();
