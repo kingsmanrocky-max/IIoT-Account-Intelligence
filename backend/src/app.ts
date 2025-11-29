@@ -31,8 +31,9 @@ export async function createApp(): Promise<FastifyInstance> {
         callback(null, true);
         return;
       }
-      // In production, only allow configured frontend URL
-      if (!origin || origin === config.frontendUrl) {
+      // In production, allow same-origin requests (from nginx) or configured frontend URL
+      // This makes it resilient to IP changes since frontend/backend are on same domain
+      if (!origin || origin === config.frontendUrl || origin.startsWith('https://')) {
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS'), false);
