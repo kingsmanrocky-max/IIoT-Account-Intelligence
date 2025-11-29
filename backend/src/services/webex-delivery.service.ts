@@ -170,33 +170,44 @@ export class WebexDeliveryService {
       // Try to trigger export if not ready
       await exportService.requestExport(report.id, report.userId, format, 'EAGER');
 
-      logger.info('Waiting 5 seconds for export to generate...');
-      // Wait a bit and retry
-      await this.sleep(5000);
+      // Retry with exponential backoff - more resilient to server load
+      const maxRetries = 3;
+      const baseDelay = 5000; // 5 seconds
 
-      const retryDownload = await exportService.getDownloadStream(
-        report.id,
-        format,
-        report.userId
-      );
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        const waitTime = baseDelay * attempt; // 5s, 10s, 15s
+        logger.info(`Waiting ${waitTime / 1000} seconds for export to generate (attempt ${attempt}/${maxRetries})...`);
+        await this.sleep(waitTime);
 
-      logger.info('Retry download result', {
-        reportId: report.id,
-        format,
-        available: !!retryDownload,
-      });
+        const retryDownload = await exportService.getDownloadStream(
+          report.id,
+          format,
+          report.userId
+        );
 
-      if (!retryDownload) {
-        throw new WebexDeliveryError('Export not ready after retry', 'EXPORT_NOT_READY', true);
+        logger.info(`Retry attempt ${attempt} result`, {
+          reportId: report.id,
+          format,
+          available: !!retryDownload,
+        });
+
+        if (retryDownload) {
+          return this.sendMultipartMessage(
+            delivery,
+            report,
+            retryDownload.buffer,
+            retryDownload.filename,
+            retryDownload.mimeType,
+            token
+          );
+        }
       }
 
-      return this.sendMultipartMessage(
-        delivery,
-        report,
-        retryDownload.buffer,
-        retryDownload.filename,
-        retryDownload.mimeType,
-        token
+      // All retries exhausted
+      throw new WebexDeliveryError(
+        `Export not ready after ${maxRetries} retries`,
+        'EXPORT_NOT_READY',
+        true
       );
     }
 
