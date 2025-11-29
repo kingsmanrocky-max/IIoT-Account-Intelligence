@@ -157,10 +157,12 @@ NEXT_PUBLIC_API_URL=http://localhost:4001/api
 
 ### Production Environment
 - **Cloud Provider**: Google Cloud Platform (GCP)
-- **VM Instance**: iiot-intelligence (us-central1-a)
-- **External IP**: 35.193.254.12
+- **VM Instance**: iiot-intelligence (us-central1-a, e2-standard-4: 4 vCPUs, 16GB RAM)
+- **External IP**: 34.135.56.108 (HTTPS only)
+- **Production URL**: https://34.135.56.108
 - **App Location**: /opt/iiot-app
 - **Database Name**: iiot_intelligence (NOT iiot_db)
+- **Admin Credentials**: admin@example.com / admin123
 
 ### Quick Deployment
 From Windows PC, use the simple deployment script:
@@ -235,6 +237,21 @@ sudo docker ps
      - DATABASE_URL has correct database name
      - Health check endpoint is correct
      - Container logs: `sudo docker logs iiot-backend-prod`
+
+6. **CORS Configuration (IP-Resilient)**
+   - CORS is configured to accept any HTTPS origin in production
+   - Located in `backend/src/app.ts` lines 26-44
+   - No need to update FRONTEND_URL when IP changes
+   - Self-signed SSL certificate at `nginx/ssl/` (generated for current IP)
+
+7. **Webex Bot Integration**
+   - Bot Token: Stored in production `.env` as `WEBEX_BOT_TOKEN`
+   - Webhook Secret: `B3rn@l2025XXL` (in production `.env`)
+   - Webhooks registered at Webex:
+     - Messages: https://34.135.56.108/api/webhooks/webex
+     - Card Actions: https://34.135.56.108/api/webhooks/webex/card-actions
+   - Adaptive Cards v1.3 templates in `backend/src/templates/webex-cards.ts`
+   - Webhook processing in `backend/src/services/webex-webhook.service.ts`
 
 ### Troubleshooting Deployment
 
