@@ -290,7 +290,7 @@ export class ReportService {
 
         const context: GenerationContext = {
           workflowType: report.workflowType as LLMWorkflowType,
-          section,
+          section: section as ReportSection,
           companyName: inputData.companyName,
           companyNames: inputData.companyNames,
           additionalContext: {
