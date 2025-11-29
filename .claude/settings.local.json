@@ -89,7 +89,9 @@
       "WebFetch(domain:docs.x.ai)",
       "WebFetch(domain:platform.openai.com)",
       "Bash(git reset:*)",
-      "Bash(timeout /t 15)"
+      "Bash(timeout /t 15)",
+      "WebFetch(domain:developer.webex.com)",
+      "WebFetch(domain:adaptivecards.io)"
     ],
     "deny": [],
     "ask": []

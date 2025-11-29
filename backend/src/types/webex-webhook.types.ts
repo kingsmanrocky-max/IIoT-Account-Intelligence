@@ -38,12 +38,22 @@ export interface WebexMessage {
   mentionedPeople?: string[];
 }
 
+export type OutputFormat = 'PDF' | 'DOCX' | 'PODCAST';
+
+export interface PodcastPreferences {
+  template?: 'EXECUTIVE_BRIEF' | 'STRATEGIC_DEBATE' | 'INDUSTRY_PULSE';
+  duration?: 'SHORT' | 'STANDARD' | 'LONG';
+}
+
 export interface ParsedReportRequest {
   targetCompany: string;
   workflowType: 'ACCOUNT_INTELLIGENCE' | 'COMPETITIVE_INTELLIGENCE' | 'NEWS_DIGEST';
   additionalCompanies?: string[];
   depth?: 'brief' | 'standard' | 'detailed';
   confidence: number;
+  // Format preferences
+  outputFormat?: OutputFormat;  // Default: PDF
+  podcastPreferences?: PodcastPreferences;
 }
 
 export interface ParsedReportRequestError {
@@ -59,4 +69,47 @@ export function isParsedRequest(result: ParseResult): result is ParsedReportRequ
 
 export function isParseError(result: ParseResult): result is ParsedReportRequestError {
   return 'error' in result;
+}
+
+// Webex Adaptive Card types
+export interface WebexAttachmentActionPayload {
+  id: string;
+  name: string;
+  resource: 'attachmentActions';
+  event: 'created';
+  orgId: string;
+  createdBy: string;
+  appId: string;
+  ownedBy: string;
+  status: string;
+  actorId: string;
+  data: {
+    id: string;
+    type: 'submit';
+    messageId: string;
+    personId: string;
+    roomId: string;
+    created: string;
+  };
+}
+
+export interface CardSubmissionInputs {
+  companyName?: string;
+  workflowType?: string;
+  additionalCompanies?: string;
+  depth?: string;
+  outputFormats?: string;
+  podcastTemplate?: string;
+  podcastDuration?: string;
+  action?: string;
+}
+
+export interface AttachmentActionDetails {
+  id: string;
+  type: string;
+  messageId: string;
+  personId: string;
+  roomId: string;
+  inputs: CardSubmissionInputs;
+  created: string;
 }

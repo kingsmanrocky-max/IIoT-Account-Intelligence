@@ -24,4 +24,9 @@ export default async function webhookRoutes(fastify: FastifyInstance) {
   fastify.post('/webex', {
     preHandler: webhookController.validateSignature.bind(webhookController),
   }, webhookController.handleWebexWebhook.bind(webhookController));
+
+  // Webex card actions webhook endpoint - handles Adaptive Card submissions
+  fastify.post('/webex/card-actions', {
+    preHandler: webhookController.validateSignature.bind(webhookController),
+  }, webhookController.handleCardAction.bind(webhookController));
 }

@@ -7,6 +7,7 @@ import { getWebexDeliveryService } from './webex-delivery.service';
 import { getAdminService } from './admin.service';
 import { logger } from '../utils/logger';
 import { config } from '../config/env';
+import { reportRequestCard, helpCard, buildReportRequestCard } from '../templates/webex-cards';
 import {
   WebexWebhookPayload,
   WebexWebhookMessageData,
@@ -15,6 +16,8 @@ import {
   ParseResult,
   isParsedRequest,
   isParseError,
+  WebexAttachmentActionPayload,
+  CardSubmissionInputs,
 } from '../types/webex-webhook.types';
 
 const prisma = new PrismaClient();
@@ -185,28 +188,65 @@ export class WebexWebhookService {
       return;
     }
 
-    // Parse user request with LLM
-    const parsed = await this.parseUserRequest(message.text);
+    const messageText = message.text.trim().toLowerCase();
 
-    if (isParseError(parsed)) {
-      // Send clarification request
-      const clarificationMsg = `I'd be happy to help! ${parsed.error}
-
-Try something like:
-- "Account report for Microsoft"
-- "Competitive analysis of Siemens"
-- "News digest for Apple, Google, Amazon"`;
-      await this.sendClarificationRequest(messageData, parsed.error);
+    // Card Trigger 1: Help/menu/form commands
+    if (/^(help|menu|options|form|show form|build report)$/i.test(messageText)) {
+      logger.info('Help command detected, sending help card', { messageText });
+      const destination = messageData.roomType === 'direct' ? messageData.personEmail : messageData.roomId;
+      const destinationType = messageData.roomType === 'direct' ? 'email' : 'roomId';
+      await this.sendHelpCard(destination, destinationType as 'email' | 'roomId');
       await this.logInteraction({
         userEmail: senderEmail,
         personId: messageData.personId,
         roomId: messageData.roomType === 'group' ? messageData.roomId : undefined,
         messageText: message.text,
         messageId: messageData.id,
-        responseType: 'ERROR',
+        responseType: 'HELP_CARD',
+        responseText: 'Help card sent',
+        success: true,
+      });
+      return;
+    }
+
+    // Parse user request with LLM
+    const parsed = await this.parseUserRequest(message.text);
+
+    // Card Trigger 3: Parse error - send report card to help user
+    if (isParseError(parsed)) {
+      logger.info('Parse error detected, sending report card to assist user', {
+        error: parsed.error
+      });
+      const destination = messageData.roomType === 'direct' ? messageData.personEmail : messageData.roomId;
+      const destinationType = messageData.roomType === 'direct' ? 'email' : 'roomId';
+
+      // Send clarification message first
+      const clarificationMsg = `I'd be happy to help! ${parsed.error}
+
+You can use the form below to build a custom report, or try something like:
+- "Account report for Microsoft"
+- "Competitive analysis of Siemens"
+- "News digest for Apple, Google, Amazon"`;
+
+      await this.sendClarificationRequest(messageData, clarificationMsg);
+
+      // Then send report card to help them
+      await this.sendReportCard(
+        destination,
+        messageData.personId,
+        destinationType as 'email' | 'roomId'
+      );
+
+      await this.logInteraction({
+        userEmail: senderEmail,
+        personId: messageData.personId,
+        roomId: messageData.roomType === 'group' ? messageData.roomId : undefined,
+        messageText: message.text,
+        messageId: messageData.id,
+        responseType: 'PARSE_ERROR_CARD',
         responseText: clarificationMsg,
-        success: false,
-        errorMessage: `Parse error: ${parsed.error}`,
+        success: true,
+        additionalData: { parseError: parsed.error },
       });
       return;
     }
@@ -237,7 +277,42 @@ Try something like:
     logger.info('Validating company name', { companyName: parsed.targetCompany });
     const companyValidation = await this.validateCompany(parsed.targetCompany);
 
-    // Block if confidence is too low
+    // Card Trigger 2: Low confidence - send prefilled card
+    if (parsed.confidence < 0.7) {
+      logger.info('Low confidence detected, sending prefilled report card', {
+        confidence: parsed.confidence,
+        targetCompany: parsed.targetCompany
+      });
+      const destination = messageData.roomType === 'direct' ? messageData.personEmail : messageData.roomId;
+      const destinationType = messageData.roomType === 'direct' ? 'email' : 'roomId';
+
+      // Send prefilled card with what we could parse
+      await this.sendReportCard(
+        destination,
+        messageData.personId,
+        destinationType as 'email' | 'roomId',
+        {
+          companyName: parsed.targetCompany,
+          workflowType: parsed.workflowType,
+          depth: parsed.depth
+        }
+      );
+
+      await this.logInteraction({
+        userEmail: senderEmail,
+        personId: messageData.personId,
+        roomId: messageData.roomType === 'group' ? messageData.roomId : undefined,
+        messageText: message.text,
+        messageId: messageData.id,
+        responseType: 'LOW_CONFIDENCE_CARD',
+        responseText: 'Report card sent (low confidence)',
+        success: true,
+        additionalData: { confidence: parsed.confidence },
+      });
+      return;
+    }
+
+    // Block if company validation confidence is too low
     if (companyValidation.confidence < 0.7) {
       const errorMsg = `I couldn't confidently identify the company "${parsed.targetCompany}". ` +
         `Could you please provide a more specific company name or additional details?`;
@@ -830,6 +905,311 @@ Your first report is being generated now!`;
         errorMessage: error instanceof Error ? error.message : 'Unknown error',
       });
     }
+  }
+
+  /**
+   * Process Webex card action (form submission)
+   */
+  async processCardAction(payload: WebexAttachmentActionPayload): Promise<void> {
+    try {
+      // Fetch the action details to get form inputs
+      const webexService = getWebexDeliveryService();
+      const actionDetails = await webexService.getAttachmentAction(payload.data.id);
+
+      logger.info('Processing card action', {
+        actionId: payload.data.id,
+        action: actionDetails.inputs.action,
+        companyName: actionDetails.inputs.companyName,
+        workflowType: actionDetails.inputs.workflowType
+      });
+
+      // Handle cancel action
+      if (actionDetails.inputs.action === 'cancel') {
+        logger.debug('Card action cancelled by user');
+        return;
+      }
+
+      // Handle showReportForm action (from help card)
+      if (actionDetails.inputs.action === 'showReportForm') {
+        await this.sendReportCard(payload.data.roomId, payload.data.personId, 'roomId');
+        return;
+      }
+
+      // Handle createReport action
+      if (actionDetails.inputs.action === 'createReport') {
+        await this.handleCardReportRequest(actionDetails.inputs, payload.data.roomId, payload.data.personId);
+        return;
+      }
+
+      logger.warn('Unknown card action', { action: actionDetails.inputs.action });
+
+    } catch (error) {
+      logger.error('Failed to process card action', {
+        error: error instanceof Error ? error.message : 'Unknown',
+        actionId: payload.data.id,
+        stack: error instanceof Error ? error.stack : undefined
+      });
+    }
+  }
+
+  /**
+   * Handle report request from card submission
+   */
+  private async handleCardReportRequest(
+    inputs: CardSubmissionInputs,
+    roomId: string,
+    personId: string
+  ): Promise<void> {
+    try {
+      // Validate required fields
+      if (!inputs.companyName) {
+        logger.warn('Card submission missing company name');
+        return;
+      }
+
+      // Get or create user based on personId
+      const message = await this.getMessageByPersonId(personId);
+      if (!message) {
+        logger.error('Could not get person email from personId');
+        return;
+      }
+
+      const user = await this.ensureUserExists(message.personEmail);
+
+      // Parse output formats (multi-select returns comma-separated string)
+      const outputFormatsStr = inputs.outputFormats || 'PDF';
+      const outputFormats = outputFormatsStr.split(',').map(f => f.trim());
+
+      // Build message data for existing methods
+      const messageData: WebexWebhookMessageData = {
+        id: message.id,
+        roomId,
+        roomType: 'direct', // Assume direct for now
+        personId,
+        personEmail: message.personEmail,
+        created: new Date().toISOString(),
+        text: `Report request via card for ${inputs.companyName}`
+      };
+
+      // Process each requested format
+      for (const format of outputFormats) {
+        if (format === 'PDF' || format === 'DOCX') {
+          // Create document report
+          await this.createDocumentReport(user, inputs, messageData, format as 'PDF' | 'DOCX');
+        } else if (format === 'PODCAST') {
+          // Create podcast report
+          await this.createPodcastReport(user, inputs, messageData);
+        }
+      }
+
+    } catch (error) {
+      logger.error('Failed to handle card report request', {
+        error: error instanceof Error ? error.message : 'Unknown'
+      });
+    }
+  }
+
+  /**
+   * Create document report (PDF or DOCX) from card inputs
+   */
+  private async createDocumentReport(
+    user: User,
+    inputs: CardSubmissionInputs,
+    messageData: WebexWebhookMessageData,
+    format: 'PDF' | 'DOCX'
+  ): Promise<void> {
+    const reportService = getReportService();
+    const workflowType = (inputs.workflowType || 'ACCOUNT_INTELLIGENCE') as WorkflowType;
+    const depth = inputs.depth || 'standard';
+    const additionalCompanies = inputs.additionalCompanies
+      ? inputs.additionalCompanies.split(',').map(c => c.trim())
+      : undefined;
+
+    const workflowLabel = {
+      ACCOUNT_INTELLIGENCE: 'Account Intelligence',
+      COMPETITIVE_INTELLIGENCE: 'Competitive Intelligence',
+      NEWS_DIGEST: 'News Digest'
+    }[workflowType];
+
+    const report = await reportService.createReport({
+      userId: user.id,
+      title: `${inputs.companyName} - ${workflowLabel}`,
+      workflowType,
+      inputData: {
+        companyName: inputs.companyName!,
+        companyNames: additionalCompanies,
+      },
+      depth: depth as 'brief' | 'standard' | 'detailed',
+      requestedFormats: [format],
+      delivery: {
+        method: 'WEBEX',
+        destination: messageData.personEmail,
+        destinationType: 'email',
+        contentType: 'ATTACHMENT',
+        format,
+      },
+    });
+
+    // Send acknowledgment
+    const acknowledgmentMsg = `Creating ${workflowLabel} report for **${inputs.companyName}** (${format} format). I'll send it when ready (2-3 minutes).`;
+    await this.sendAcknowledgment(messageData, acknowledgmentMsg);
+
+    logger.info('Document report created from card', {
+      reportId: report.id,
+      companyName: inputs.companyName,
+      workflowType,
+      format
+    });
+  }
+
+  /**
+   * Create podcast report from card inputs
+   */
+  private async createPodcastReport(
+    user: User,
+    inputs: CardSubmissionInputs,
+    messageData: WebexWebhookMessageData
+  ): Promise<void> {
+    const reportService = getReportService();
+    const workflowType = (inputs.workflowType || 'ACCOUNT_INTELLIGENCE') as WorkflowType;
+    const depth = inputs.depth || 'standard';
+    const additionalCompanies = inputs.additionalCompanies
+      ? inputs.additionalCompanies.split(',').map(c => c.trim())
+      : undefined;
+
+    const podcastTemplate = inputs.podcastTemplate || 'EXECUTIVE_BRIEF';
+    const podcastDuration = inputs.podcastDuration || 'STANDARD';
+
+    const workflowLabel = {
+      ACCOUNT_INTELLIGENCE: 'Account Intelligence',
+      COMPETITIVE_INTELLIGENCE: 'Competitive Intelligence',
+      NEWS_DIGEST: 'News Digest'
+    }[workflowType];
+
+    const report = await reportService.createReport({
+      userId: user.id,
+      title: `${inputs.companyName} - ${workflowLabel} Podcast`,
+      workflowType,
+      inputData: {
+        companyName: inputs.companyName!,
+        companyNames: additionalCompanies,
+      },
+      depth: depth as 'brief' | 'standard' | 'detailed',
+      requestedFormats: ['PDF'], // Base report for podcast
+      podcastOptions: {
+        template: podcastTemplate as any,
+        duration: podcastDuration as any,
+        deliveryEnabled: true,
+        deliveryDestination: messageData.personEmail,
+        deliveryDestinationType: 'email',
+      },
+    });
+
+    // Send acknowledgment
+    const durationLabels = { SHORT: '5 minute', STANDARD: '12 minute', LONG: '18 minute' };
+    const templateLabels = {
+      EXECUTIVE_BRIEF: 'Executive Brief',
+      STRATEGIC_DEBATE: 'Strategic Debate',
+      INDUSTRY_PULSE: 'Industry Pulse'
+    };
+    const acknowledgmentMsg = `Creating ${durationLabels[podcastDuration as keyof typeof durationLabels]} ${templateLabels[podcastTemplate as keyof typeof templateLabels]} podcast for **${inputs.companyName}**. I'll send the audio when ready (5-8 minutes).`;
+    await this.sendAcknowledgment(messageData, acknowledgmentMsg);
+
+    logger.info('Podcast report created from card', {
+      reportId: report.id,
+      companyName: inputs.companyName,
+      workflowType,
+      podcastTemplate,
+      podcastDuration
+    });
+  }
+
+  /**
+   * Get person details by person ID from Webex API
+   */
+  private async getMessageByPersonId(personId: string): Promise<WebexMessage | null> {
+    try {
+      const adminService = getAdminService();
+      const settings = await adminService.getSettings();
+
+      if (!settings.webexBotToken) {
+        logger.error('Webex bot token not configured');
+        return null;
+      }
+
+      // Fetch person details from Webex API
+      const response = await fetch(`https://webexapis.com/v1/people/${personId}`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${settings.webexBotToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        logger.error('Failed to fetch person details from Webex', {
+          personId,
+          status: response.status
+        });
+        return null;
+      }
+
+      const person = await response.json();
+
+      // Return a mock WebexMessage with the person's email
+      return {
+        id: crypto.randomBytes(16).toString('hex'),
+        roomId: '',
+        roomType: 'direct',
+        text: '',
+        personId,
+        personEmail: person.emails[0],
+        created: new Date().toISOString(),
+      };
+    } catch (error) {
+      logger.error('Failed to get message by person ID', { error });
+      return null;
+    }
+  }
+
+  /**
+   * Send report request card to user
+   */
+  async sendReportCard(
+    destination: string,
+    personId: string,
+    destinationType: 'email' | 'roomId',
+    prefill?: { companyName?: string; workflowType?: string; depth?: string }
+  ): Promise<void> {
+    const webexService = getWebexDeliveryService();
+    const card = prefill ? buildReportRequestCard(prefill) : reportRequestCard;
+
+    await webexService.sendCardMessage(
+      destination,
+      destinationType,
+      card,
+      'Use the form to create a custom report'
+    );
+
+    logger.info('Report request card sent', { destination, destinationType });
+  }
+
+  /**
+   * Send help card to user
+   */
+  async sendHelpCard(
+    destination: string,
+    destinationType: 'email' | 'roomId'
+  ): Promise<void> {
+    const webexService = getWebexDeliveryService();
+
+    await webexService.sendCardMessage(
+      destination,
+      destinationType,
+      helpCard,
+      'IIoT Account Intelligence Bot - Type "help" for assistance'
+    );
+
+    logger.info('Help card sent', { destination, destinationType });
   }
 }
 

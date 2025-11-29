@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import { getAdminService } from '../services/admin.service';
 import { getWebexWebhookService } from '../services/webex-webhook.service';
 import { logger } from '../utils/logger';
-import { WebexWebhookPayload } from '../types/webex-webhook.types';
+import { WebexWebhookPayload, WebexAttachmentActionPayload } from '../types/webex-webhook.types';
 
 export class WebhookController {
 
@@ -105,6 +105,55 @@ export class WebhookController {
     } catch (error) {
       const duration = Date.now() - startTime;
       logger.error('Webhook handler error', {
+        error: error instanceof Error ? error.message : 'Unknown',
+        duration,
+        stack: error instanceof Error ? error.stack : undefined
+      });
+
+      // Still return 200 to prevent Webex from retrying
+      return reply.status(200).send({ received: true, processed: false });
+    }
+  }
+
+  /**
+   * Handle incoming Webex card action (form submission)
+   */
+  async handleCardAction(
+    request: FastifyRequest<{ Body: WebexAttachmentActionPayload }>,
+    reply: FastifyReply
+  ) {
+    const startTime = Date.now();
+
+    try {
+      const payload = request.body;
+
+      logger.info('Webex card action received', {
+        actionId: payload.data.id,
+        resource: payload.resource,
+        event: payload.event,
+        personId: payload.data.personId,
+        roomId: payload.data.roomId
+      });
+
+      // Process asynchronously - don't block the response
+      const webhookService = getWebexWebhookService();
+      webhookService.processCardAction(payload).catch(error => {
+        logger.error('Card action processing failed', {
+          error: error instanceof Error ? error.message : 'Unknown',
+          actionId: payload.data.id,
+          stack: error instanceof Error ? error.stack : undefined
+        });
+      });
+
+      // Always return 200 quickly to Webex to prevent retries
+      const duration = Date.now() - startTime;
+      logger.debug('Card action response sent', { duration });
+
+      return reply.status(200).send({ received: true });
+
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      logger.error('Card action handler error', {
         error: error instanceof Error ? error.message : 'Unknown',
         duration,
         stack: error instanceof Error ? error.stack : undefined
