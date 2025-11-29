@@ -768,6 +768,29 @@ Examples:
   }
 
   /**
+   * Send simple acknowledgment message for card-based reports
+   */
+  private async sendSimpleAcknowledgment(
+    messageData: WebexWebhookMessageData,
+    message: string
+  ): Promise<void> {
+    const webexService = getWebexDeliveryService();
+
+    const destination = messageData.roomType === 'direct'
+      ? messageData.personEmail
+      : messageData.roomId;
+    const destinationType = messageData.roomType === 'direct' ? 'email' : 'roomId';
+
+    try {
+      await webexService.sendWebexMessage(destination, message, destinationType);
+    } catch (error) {
+      logger.error('Failed to send acknowledgment', {
+        error: error instanceof Error ? error.message : 'Unknown'
+      });
+    }
+  }
+
+  /**
    * Send clarification request
    */
   private async sendClarificationRequest(
@@ -974,7 +997,7 @@ Your first report is being generated now!`;
         return;
       }
 
-      const user = await this.ensureUserExists(message.personEmail);
+      const user = await this.findOrCreateCiscoUser(message.personEmail);
 
       // Parse output formats (multi-select returns comma-separated string)
       const outputFormatsStr = inputs.outputFormats || 'PDF';
@@ -1052,7 +1075,7 @@ Your first report is being generated now!`;
 
     // Send acknowledgment
     const acknowledgmentMsg = `Creating ${workflowLabel} report for **${inputs.companyName}** (${format} format). I'll send it when ready (2-3 minutes).`;
-    await this.sendAcknowledgment(messageData, acknowledgmentMsg);
+    await this.sendSimpleAcknowledgment(messageData, acknowledgmentMsg);
 
     logger.info('Document report created from card', {
       reportId: report.id,
@@ -1113,7 +1136,7 @@ Your first report is being generated now!`;
       INDUSTRY_PULSE: 'Industry Pulse'
     };
     const acknowledgmentMsg = `Creating ${durationLabels[podcastDuration as keyof typeof durationLabels]} ${templateLabels[podcastTemplate as keyof typeof templateLabels]} podcast for **${inputs.companyName}**. I'll send the audio when ready (5-8 minutes).`;
-    await this.sendAcknowledgment(messageData, acknowledgmentMsg);
+    await this.sendSimpleAcknowledgment(messageData, acknowledgmentMsg);
 
     logger.info('Podcast report created from card', {
       reportId: report.id,
@@ -1153,7 +1176,7 @@ Your first report is being generated now!`;
         return null;
       }
 
-      const person = await response.json();
+      const person = await response.json() as { emails: string[] };
 
       // Return a mock WebexMessage with the person's email
       return {
