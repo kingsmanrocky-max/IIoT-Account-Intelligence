@@ -4,6 +4,7 @@
 import { PrismaClient, Prisma, Report, ReportStatus, WorkflowType, ReportFormat } from '@prisma/client';
 import { getLLMService } from './llm.service';
 import { getExportService } from './export.service';
+import { sectionService } from './section.service';
 import {
   GenerationContext,
   GeneratedContent,
@@ -136,22 +137,57 @@ export class ReportService {
       throw new Error('At least one company name is required for News Digest');
     }
 
-    // Validate sections if provided
-    const defaultSections = WORKFLOW_SECTIONS[workflowType];
-    const selectedSections = sections && sections.length > 0 ? sections : defaultSections;
-
-    // Ensure all selected sections are valid for this workflow
-    const invalidSections = selectedSections.filter(s => !defaultSections.includes(s));
-    if (invalidSections.length > 0) {
-      throw new Error(`Invalid sections for ${workflowType}: ${invalidSections.join(', ')}`);
-    }
-
     // Determine depth preference (default to standard)
     const depthPreference: DepthPreference = depth || 'standard';
+
+    // Get sections: use provided sections or fetch defaults from database
+    let selectedSections: string[];
+    if (sections && sections.length > 0) {
+      // Validate provided sections against database
+      const invalidSections = await sectionService.validateSections(sections, workflowType);
+      if (invalidSections.length > 0) {
+        // Fallback to hardcoded if database validation fails
+        const fallbackSections = WORKFLOW_SECTIONS[workflowType];
+        logger.warn(`Invalid sections [${invalidSections.join(', ')}] for ${workflowType}, using fallback sections`);
+        selectedSections = fallbackSections;
+      } else {
+        selectedSections = sections;
+      }
+    } else {
+      // Fetch default sections from database based on workflow and depth
+      try {
+        const dbSections = await sectionService.getDefaultSections(workflowType, depthPreference);
+        if (dbSections.length > 0) {
+          selectedSections = dbSections;
+          logger.info(`Using ${dbSections.length} database-driven sections for ${workflowType} at depth ${depthPreference}: [${dbSections.join(', ')}]`);
+        } else {
+          // Fallback to hardcoded if no database sections found
+          selectedSections = WORKFLOW_SECTIONS[workflowType];
+          logger.warn(`No database sections found for ${workflowType} at ${depthPreference}, using hardcoded fallback`);
+        }
+      } catch (error) {
+        // Fallback to hardcoded on error
+        selectedSections = WORKFLOW_SECTIONS[workflowType];
+        logger.error(`Error fetching sections from database, using hardcoded fallback:`, error);
+      }
+    }
 
     // Calculate max tokens based on depth
     const tokensByDepth = { brief: 1000, standard: 4000, detailed: 6000 };
     const maxTokens = tokensByDepth[depthPreference];
+
+    // Get LLM model with proper fallback chain:
+    // 1. Explicit request parameter (if provided)
+    // 2. System-wide default from admin settings
+    // 3. Hard-coded fallback
+    let selectedModel = llmModel;
+    if (!selectedModel) {
+      // Check system config for admin-set default
+      const systemConfig = await prisma.systemConfig.findUnique({
+        where: { key: 'llm_default_model' },
+      });
+      selectedModel = systemConfig?.value || 'gpt-4';
+    }
 
     // Create report record
     const report = await prisma.report.create({
@@ -179,7 +215,7 @@ export class ReportService {
           // Store podcast options if provided
           ...(podcastOptions && { podcastOptions }),
         } as any,
-        llmModel: llmModel || 'gpt-4',
+        llmModel: selectedModel,
         requestedFormats: requestedFormats || [],
       },
     });
@@ -208,7 +244,7 @@ export class ReportService {
     });
 
     try {
-      // Use configured sections from report, fall back to workflow defaults
+      // Use configured sections from report, fall back to database defaults
       const configuration = report.configuration as {
         sections?: ReportSection[];
         depth?: DepthPreference;
@@ -216,8 +252,30 @@ export class ReportService {
         competitiveOptions?: CompetitiveIntelligenceOptions;
         newsDigestOptions?: NewsDigestOptions;
       } | null;
-      const sections = configuration?.sections || WORKFLOW_SECTIONS[report.workflowType];
+
       const depth = configuration?.depth || 'standard';
+
+      // Get sections with database fallback
+      let sections: string[];
+      if (configuration?.sections && configuration.sections.length > 0) {
+        sections = configuration.sections;
+      } else {
+        // Fetch from database based on workflow and depth
+        try {
+          const dbSections = await sectionService.getDefaultSections(report.workflowType, depth);
+          if (dbSections.length > 0) {
+            sections = dbSections;
+            logger.info(`Using ${dbSections.length} database sections for report ${reportId} (${report.workflowType} at ${depth}): [${dbSections.join(', ')}]`);
+          } else {
+            sections = WORKFLOW_SECTIONS[report.workflowType];
+            logger.warn(`No database sections for ${report.workflowType} at ${depth}, using hardcoded fallback`);
+          }
+        } catch (error) {
+          sections = WORKFLOW_SECTIONS[report.workflowType];
+          logger.error(`Error fetching sections for report ${reportId}, using hardcoded fallback:`, error);
+        }
+      }
+
       const competitiveOptions = configuration?.competitiveOptions;
       const newsDigestOptions = configuration?.newsDigestOptions;
       const inputData = report.inputData as any;

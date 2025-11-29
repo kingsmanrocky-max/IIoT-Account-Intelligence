@@ -178,13 +178,38 @@ export class ExportService {
     }
   }
 
-  // Generate PDF from report
-  private async generatePDF(report: Report): Promise<Buffer> {
+  // Generate PDF from report with retry logic
+  private async generatePDF(report: Report, retries = 3): Promise<Buffer> {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        return await this._generatePDFInternal(report);
+      } catch (error: any) {
+        const isRetryable = error.message?.includes('ECONNRESET') ||
+                            error.message?.includes('Protocol error');
+
+        if (isRetryable && attempt < retries) {
+          logger.warn(`PDF generation attempt ${attempt} failed, retrying...`, {
+            exportService: 'pdf-generation',
+            error: error.message,
+            attempt,
+          });
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Exponential backoff
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw new Error('PDF generation failed after all retries');
+  }
+
+  // Internal PDF generation method
+  private async _generatePDFInternal(report: Report): Promise<Buffer> {
     const reportData = {
       id: report.id,
       title: report.title,
       workflowType: report.workflowType,
       companyName: (report.inputData as any)?.companyName,
+      llmModel: report.llmModel,
       generatedContent: report.generatedContent as any,
       createdAt: report.createdAt,
       completedAt: report.completedAt || undefined,
@@ -192,23 +217,40 @@ export class ExportService {
 
     const html = buildPdfHtml(reportData);
 
+    // Detect environment for optimal Puppeteer configuration
+    const isWindows = process.platform === 'win32';
+    const isDocker = process.env.PUPPETEER_EXECUTABLE_PATH !== undefined;
+
+    // Base args for all environments
+    const args = [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--disable-software-rasterizer',
+    ];
+
+    // Only add container-specific flags when in Docker/Linux, not on Windows
+    if (!isWindows && isDocker) {
+      args.push('--single-process', '--no-zygote');
+    }
+
     const browser = await puppeteer.launch({
       headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--disable-software-rasterizer',
-        '--single-process',           // Required for containerized environments
-        '--no-zygote',               // Prevents fork issues in containers
-      ],
+      pipe: true,  // Use pipe instead of WebSocket - more stable on Windows
+      protocolTimeout: 60000,  // 60 second protocol timeout
+      args,
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
     });
 
     try {
       const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: 'networkidle0' });
+      page.setDefaultTimeout(30000);  // 30 second default timeout
+
+      await page.setContent(html, {
+        waitUntil: 'networkidle0',
+        timeout: 30000,
+      });
 
       const pdfBuffer = await page.pdf({
         format: 'A4',
@@ -244,6 +286,7 @@ export class ExportService {
         workflowType: report.workflowType,
         generatedAt: report.completedAt || report.createdAt,
         reportId: report.id,
+        llmModel: report.llmModel,
       })
     );
 

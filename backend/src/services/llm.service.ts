@@ -26,10 +26,16 @@ import {
 
 // Prompt Templates for different content types
 const SYSTEM_PROMPTS = {
-  ACCOUNT_INTELLIGENCE: `You are a professional business analyst specializing in IIoT (Industrial Internet of Things) and enterprise technology.
-Your task is to generate accurate, well-researched content about companies for account intelligence reports.
-Always cite sources when possible, distinguish between verified data and estimates, and maintain a professional, executive-briefing tone.
-Format your responses for clarity with appropriate headers and bullet points when needed.`,
+  ACCOUNT_INTELLIGENCE: `You are a senior business intelligence analyst specializing in Industrial Internet of Things (IIoT), operational technology (OT), and enterprise digital infrastructure.
+
+Your role is to produce factual, well-researched intelligence briefings about organizations, including corporations, government agencies, municipalities, and public institutions. These briefings inform strategic decision-making for Cisco account executives focused on industrial and manufacturing sectors.
+
+Guidelines:
+- Present facts and analysis objectively - this is an intelligence briefing, not a sales document
+- Cite sources when available; clearly distinguish verified data from estimates or projections
+- Maintain an executive-briefing tone: professional, concise, and insight-driven
+- Focus on IIoT relevance: manufacturing operations, supply chain, industrial automation, smart infrastructure, connected operations, and operational technology
+- Avoid product recommendations or sales language`,
 
   COMPETITIVE_INTELLIGENCE: `You are a competitive intelligence analyst with deep expertise in the Cisco IIoT portfolio and industrial automation market.
 Your task is to analyze competitors and provide strategic insights for sales teams.
@@ -308,10 +314,43 @@ export class LLMService {
       userPrompt = this.buildUserPrompt(context, sectionPrompt);
     }
 
+    // Add depth-specific instructions to override any fixed word targets in prompts
+    let finalPrompt = userPrompt;
+    if (context.depth === 'brief') {
+      finalPrompt += `
+
+IMPORTANT DEPTH INSTRUCTION: This is an EXECUTIVE BRIEF narrative.
+- Target: ~800 words total for this SINGLE section
+- Combine ALL topics into ONE unified flowing narrative (NOT separate paragraphs per topic)
+- Write as continuous prose with smooth transitions between topics
+- Weave together: organizational profile, financial position, security posture, and recent developments into a cohesive story
+- Use a journalistic style suitable for a quick executive read
+- Do NOT use headers, bullets, or separate sections
+- Do NOT write separate paragraphs for each topic - blend them naturally
+- Think of this as a news article or executive memo, not a sectioned report`;
+    } else if (context.depth === 'detailed') {
+      finalPrompt += `
+
+IMPORTANT DEPTH INSTRUCTION: This is a DETAILED comprehensive analysis.
+- Target: 800-1200 words minimum
+- Cover all relevant topics with thorough depth
+- Include additional analysis areas beyond the basics:
+  * Technology stack and digital infrastructure
+  * Competitive landscape and market positioning
+  * Key partnerships and ecosystem relationships
+  * Historical context and trajectory
+  * Risk factors and challenges
+- Provide specific examples, data points, statistics, and context
+- Include both current state analysis AND forward-looking projections
+- Use structured headers and clear subsections
+- Reference sources where available`;
+    }
+    // Standard depth uses the base prompt as-is (no additional instructions)
+
     const response = await this.complete({
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
+        { role: 'user', content: finalPrompt },
       ],
       temperature: await this.getTemperature(context.workflowType),
       maxTokens: this.getMaxTokensByDepth(context.depth),
@@ -495,13 +534,6 @@ export class LLMService {
       if (Object.keys(otherContext).length > 0) {
         prompt += `\n\nAdditional context: ${JSON.stringify(otherContext)}`;
       }
-    }
-
-    // Apply depth-based instructions
-    if (context.depth === 'brief') {
-      prompt += '\n\nIMPORTANT: Keep this section concise (100-150 words). Focus on the most critical points only. Use bullet points where appropriate for quick scanning.';
-    } else if (context.depth === 'detailed') {
-      prompt += '\n\nIMPORTANT: Provide comprehensive, in-depth analysis (500-800 words). Include specific examples, data points, citations where available, and detailed explanations. Offer nuanced insights and thorough coverage of the topic.';
     }
 
     return prompt;

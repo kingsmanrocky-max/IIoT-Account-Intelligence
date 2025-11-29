@@ -17,19 +17,19 @@ const depthOptions: {
   {
     value: 'brief',
     label: 'Brief',
-    description: 'Quick summary with key points only',
+    description: 'Executive summary with key facts only',
     time: '2-3 min',
   },
   {
     value: 'standard',
     label: 'Standard',
-    description: 'Balanced coverage with essential details',
+    description: 'Balanced coverage of all topics',
     time: '5-7 min',
   },
   {
     value: 'detailed',
     label: 'Detailed',
-    description: 'Comprehensive analysis with in-depth insights',
+    description: 'Comprehensive analysis with full context',
     time: '10-15 min',
   },
 ];

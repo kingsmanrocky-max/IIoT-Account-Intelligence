@@ -7,6 +7,7 @@ interface ReportData {
   title: string;
   workflowType: string;
   companyName?: string;
+  llmModel: string;
   generatedContent: Record<string, { section: string; content: string; metadata: any }>;
   createdAt: Date;
   completedAt?: Date;
@@ -40,6 +41,7 @@ const buildCoverPage = (report: ReportData): string => {
       ${companyName ? `<div class="cover-company">${escapeHtml(companyName)}</div>` : ''}
       <div class="cover-meta">
         <div class="cover-meta-item">Generated: ${formatDate(new Date(report.completedAt || report.createdAt))}</div>
+        <div class="cover-meta-item">Model: ${escapeHtml(report.llmModel)}</div>
         <div class="cover-meta-item">Report ID: ${report.id}</div>
       </div>
     </div>

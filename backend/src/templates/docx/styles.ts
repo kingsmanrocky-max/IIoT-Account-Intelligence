@@ -202,6 +202,7 @@ export const createCoverPage = (data: {
   workflowType: string;
   generatedAt: Date;
   reportId: string;
+  llmModel?: string;
 }): Paragraph[] => {
   return [
     // Spacer
@@ -258,6 +259,21 @@ export const createCoverPage = (data: {
       ],
       alignment: AlignmentType.CENTER,
     }),
+    // Model
+    ...(data.llmModel
+      ? [
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: `Model: ${data.llmModel}`,
+                size: 18, // 9pt
+                color: '9CA3AF',
+              }),
+            ],
+            alignment: AlignmentType.CENTER,
+          }),
+        ]
+      : []),
     // Report ID
     new Paragraph({
       children: [
