@@ -156,13 +156,31 @@ NEXT_PUBLIC_API_URL=http://localhost:4001/api
 ## Deployment Workflow (Windows → GCP)
 
 ### Production Environment
+
+**GCP Instance Details:**
 - **Cloud Provider**: Google Cloud Platform (GCP)
-- **VM Instance**: iiot-intelligence (us-central1-a, e2-standard-4: 4 vCPUs, 16GB RAM)
+- **VM Instance**: iiot-intelligence
+- **Region/Zone**: us-central1-a
+- **Machine Type**: e2-standard-4
+  - **vCPUs**: 4 cores
+  - **Memory**: 16 GB RAM (15 GiB available)
+  - **Storage**: 30 GB Persistent Disk (SSD)
+  - **Current Usage**: 22 GB used, 7 GB available (77% utilized)
+
+**Network & Access:**
 - **External IP**: 34.135.56.108 (HTTPS only)
 - **Production URL**: https://34.135.56.108
+- **SSL**: Self-signed certificate at `nginx/ssl/`
+
+**Application Details:**
 - **App Location**: /opt/iiot-app
 - **Database Name**: iiot_intelligence (NOT iiot_db)
 - **Admin Credentials**: admin@example.com / admin123
+
+**Resource Monitoring:**
+- Monitor disk usage regularly (currently at 77%)
+- Memory utilization is healthy with 14 GiB available
+- No swap configured (not needed with 16GB RAM)
 
 ### Quick Deployment
 From Windows PC, use the simple deployment script:
