@@ -502,10 +502,18 @@ You can use the form below to build a custom report, or try something like:
 
     const systemPrompt = `You are an intent parser for the IIoT Account Intelligence platform.
 Extract the following from the user's message:
-1. targetCompany (required)
+1. targetCompany (required): The primary company name
 2. workflowType: ACCOUNT_INTELLIGENCE (default), COMPETITIVE_INTELLIGENCE, or NEWS_DIGEST
-3. additionalCompanies (for NEWS_DIGEST)
-4. depth: brief, standard, or detailed
+3. additionalCompanies: Array of company names (for NEWS_DIGEST only)
+4. depth: brief, standard (default), or detailed
+5. outputFormats: Array of requested formats. Look for:
+   - "PDF" or "pdf" or "document" → PDF
+   - "DOCX" or "Word" or "word document" → DOCX
+   - "podcast" or "audio" → PODCAST
+   - If none mentioned, default to ["PDF"]
+6. podcastPreferences (only if PODCAST requested):
+   - template: EXECUTIVE_BRIEF (default), STRATEGIC_DEBATE, or INDUSTRY_PULSE
+   - duration: SHORT (~5 min), STANDARD (~12 min, default), or LONG (~18 min)
 
 Return ONLY valid JSON matching this schema:
 {
@@ -513,15 +521,17 @@ Return ONLY valid JSON matching this schema:
   "workflowType": "ACCOUNT_INTELLIGENCE" | "COMPETITIVE_INTELLIGENCE" | "NEWS_DIGEST",
   "additionalCompanies": ["string"] | null,
   "depth": "brief" | "standard" | "detailed",
+  "outputFormats": ["PDF"] | ["DOCX"] | ["PODCAST"] | ["PDF", "DOCX"] | ["PDF", "PODCAST"] | etc,
+  "podcastPreferences": { "template": "...", "duration": "..." } | null,
   "confidence": 0.0-1.0
 }
 
 If you cannot extract a valid company name, return: {"error": "reason", "confidence": 0}
 
 Examples:
-- "Tell me about Microsoft" -> {"targetCompany": "Microsoft", "workflowType": "ACCOUNT_INTELLIGENCE", "additionalCompanies": null, "depth": "standard", "confidence": 0.95}
-- "Competitive analysis of Siemens" -> {"targetCompany": "Siemens", "workflowType": "COMPETITIVE_INTELLIGENCE", "additionalCompanies": null, "depth": "standard", "confidence": 0.90}
-- "Brief news digest for Apple, Google, Amazon" -> {"targetCompany": "Apple", "workflowType": "NEWS_DIGEST", "additionalCompanies": ["Google", "Amazon"], "depth": "brief", "confidence": 0.85}`;
+- "Tell me about Microsoft" -> {"targetCompany": "Microsoft", "workflowType": "ACCOUNT_INTELLIGENCE", "additionalCompanies": null, "depth": "standard", "outputFormats": ["PDF"], "podcastPreferences": null, "confidence": 0.95}
+- "Give me a PDF and podcast about Siemens" -> {"targetCompany": "Siemens", "workflowType": "ACCOUNT_INTELLIGENCE", "additionalCompanies": null, "depth": "standard", "outputFormats": ["PDF", "PODCAST"], "podcastPreferences": {"template": "EXECUTIVE_BRIEF", "duration": "STANDARD"}, "confidence": 0.90}
+- "Brief strategic debate podcast for Rockwell" -> {"targetCompany": "Rockwell", "workflowType": "ACCOUNT_INTELLIGENCE", "additionalCompanies": null, "depth": "brief", "outputFormats": ["PODCAST"], "podcastPreferences": {"template": "STRATEGIC_DEBATE", "duration": "STANDARD"}, "confidence": 0.88}`;
 
     try {
       const response = await llmService.complete({
@@ -530,14 +540,19 @@ Examples:
           { role: 'user', content: message }
         ],
         temperature: 0.1,
-        maxTokens: 300
+        maxTokens: 400
       });
 
       const parsed = JSON.parse(response.content);
 
-      // Set default depth if not provided
-      if (isParsedRequest(parsed) && !parsed.depth) {
-        parsed.depth = 'standard';
+      // Set defaults if not provided
+      if (isParsedRequest(parsed)) {
+        if (!parsed.depth) {
+          parsed.depth = 'standard';
+        }
+        if (!parsed.outputFormats || parsed.outputFormats.length === 0) {
+          parsed.outputFormats = ['PDF'];
+        }
       }
 
       return parsed;
@@ -857,6 +872,16 @@ Your first report is being generated now!`;
     const messageText = message?.text || '[Message text not available]';
 
     try {
+      // Prepare podcast options if podcast is requested
+      const formats = parsed.outputFormats || ['PDF'];
+      const podcastOptions = formats.includes('PODCAST') ? {
+        template: (parsed.podcastPreferences?.template || 'EXECUTIVE_BRIEF') as any,
+        duration: (parsed.podcastPreferences?.duration || 'STANDARD') as any,
+        deliveryEnabled: true,
+        deliveryDestination: messageData.personEmail,
+        deliveryDestinationType: 'email' as const,
+      } : undefined;
+
       const report = await reportService.createReport({
         userId: user.id,
         title: `${parsed.targetCompany} - ${workflowLabel}`,
@@ -866,7 +891,8 @@ Your first report is being generated now!`;
           companyNames: parsed.additionalCompanies,
         },
         depth: parsed.depth || 'standard',
-        requestedFormats: ['PDF'], // Request PDF generation for attachment
+        requestedFormats: formats, // Use extracted formats from LLM
+        podcastOptions, // Include podcast options if podcast is requested
         delivery: {
           method: 'WEBEX',
           destination: messageData.roomType === 'direct'
@@ -883,8 +909,38 @@ Your first report is being generated now!`;
         userId: user.id
       });
 
+      // Build format description for acknowledgment
+      const formatDescriptions: Record<string, string> = {
+        PDF: 'PDF document',
+        DOCX: 'Word document',
+        PODCAST: 'audio podcast'
+      };
+
+      const formats = parsed.outputFormats || ['PDF'];
+      const formatList = formats.map(f => formatDescriptions[f]).join(' and ');
+
+      // Include podcast details if applicable
+      let podcastDetail = '';
+      if (formats.includes('PODCAST') && parsed.podcastPreferences) {
+        const templateNames: Record<string, string> = {
+          EXECUTIVE_BRIEF: 'Executive Brief',
+          STRATEGIC_DEBATE: 'Strategic Debate',
+          INDUSTRY_PULSE: 'Industry Pulse'
+        };
+        const durationNames: Record<string, string> = {
+          SHORT: 'short',
+          STANDARD: 'standard',
+          LONG: 'long'
+        };
+        const template = templateNames[parsed.podcastPreferences.template || 'EXECUTIVE_BRIEF'];
+        const duration = durationNames[parsed.podcastPreferences.duration || 'STANDARD'];
+        podcastDetail = ` (${template}, ${duration} format)`;
+      }
+
+      const depthLabel = parsed.depth ? `${parsed.depth} ` : '';
+
       // Log successful interaction
-      const acknowledgmentMsg = `Generating **${workflowLabel}** report for **${parsed.targetCompany}**. I'll send it when ready (2-3 minutes).`;
+      const acknowledgmentMsg = `Generating **${depthLabel}${workflowLabel}** report for **${parsed.targetCompany}**.\n\n📄 **Output:** ${formatList}${podcastDetail}\n\nI'll send the results when ready (typically 1-2 minutes).`;
       await this.logInteraction({
         userEmail: messageData.personEmail,
         personId: messageData.personId,

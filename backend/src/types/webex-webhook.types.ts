@@ -52,7 +52,7 @@ export interface ParsedReportRequest {
   depth?: 'brief' | 'standard' | 'detailed';
   confidence: number;
   // Format preferences
-  outputFormat?: OutputFormat;  // Default: PDF
+  outputFormats?: OutputFormat[];  // Array to support multiple formats. Default: ['PDF']
   podcastPreferences?: PodcastPreferences;
 }
 
