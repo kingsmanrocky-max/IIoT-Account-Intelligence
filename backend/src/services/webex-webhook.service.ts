@@ -896,7 +896,8 @@ Your first report is being generated now!`;
           companyNames: parsed.additionalCompanies,
         },
         depth: parsed.depth || 'standard',
-        requestedFormats: documentFormats.length > 0 ? documentFormats : ['PDF'], // Use document formats only
+        // Only include document formats if requested, otherwise pass empty array (podcast-only)
+        requestedFormats: documentFormats.length > 0 ? documentFormats : undefined,
         podcastOptions, // Include podcast options if podcast is requested
         delivery: {
           method: 'WEBEX',
