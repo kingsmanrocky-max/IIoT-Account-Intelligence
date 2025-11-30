@@ -729,7 +729,10 @@ Examples:
 
     const workflowLabel = workflowLabels[parsed.workflowType] || parsed.workflowType;
 
-    let message = `Generating **${workflowLabel}** report for **${parsed.targetCompany}**.`;
+    // Determine depth label
+    const depthLabel = parsed.depth ? `${parsed.depth} ` : '';
+
+    let message = `Generating **${depthLabel}${workflowLabel}** report for **${parsed.targetCompany}**.`;
 
     // Add validated company info if available
     if (companyValidation) {
@@ -743,7 +746,38 @@ Examples:
       message += `\n\nIncluding: ${parsed.additionalCompanies.join(', ')}`;
     }
 
-    message += `\n\nI'll send it when ready (2-3 minutes).`;
+    // Build format description
+    const requestedFormats = parsed.outputFormats || ['PDF'];
+    const hasPodcast = requestedFormats.includes('PODCAST');
+
+    const formatDescriptions: Record<string, string> = {
+      PDF: 'PDF document',
+      DOCX: 'Word document',
+      PODCAST: 'audio podcast'
+    };
+
+    const formatList = requestedFormats.map(f => formatDescriptions[f]).join(' and ');
+
+    // Include podcast details if applicable
+    let podcastDetail = '';
+    if (hasPodcast && parsed.podcastPreferences) {
+      const templateNames: Record<string, string> = {
+        EXECUTIVE_BRIEF: 'Executive Brief',
+        STRATEGIC_DEBATE: 'Strategic Debate',
+        INDUSTRY_PULSE: 'Industry Pulse'
+      };
+      const durationNames: Record<string, string> = {
+        SHORT: 'short',
+        STANDARD: 'standard',
+        LONG: 'long'
+      };
+      const template = templateNames[parsed.podcastPreferences.template || 'EXECUTIVE_BRIEF'];
+      const duration = durationNames[parsed.podcastPreferences.duration || 'STANDARD'];
+      podcastDetail = ` (${template}, ${duration} format)`;
+    }
+
+    message += `\n\n📄 **Output:** ${formatList}${podcastDetail}`;
+    message += `\n\nI'll send the results when ready (typically 1-2 minutes).`;
 
     const destination = messageData.roomType === 'direct'
       ? messageData.personEmail
