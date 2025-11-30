@@ -777,7 +777,20 @@ Examples:
     }
 
     message += `\n\n📄 **Output:** ${formatList}${podcastDetail}`;
-    message += `\n\nI'll send the results when ready (typically 1-2 minutes).`;
+
+    // Build timing expectations based on requested formats
+    const hasDocument = requestedFormats.some(f => f === 'PDF' || f === 'DOCX');
+
+    if (hasDocument && hasPodcast) {
+      // Both document and podcast
+      message += `\n\n⏱️ **Timing:** Report will arrive in ~1-2 minutes, podcast in ~3-5 minutes.`;
+    } else if (hasPodcast) {
+      // Podcast only
+      message += `\n\n⏱️ **Timing:** Podcast will arrive in ~3-5 minutes.`;
+    } else {
+      // Document only (PDF/DOCX)
+      message += `\n\n⏱️ **Timing:** Report will arrive in ~1-2 minutes.`;
+    }
 
     const destination = messageData.roomType === 'direct'
       ? messageData.personEmail
