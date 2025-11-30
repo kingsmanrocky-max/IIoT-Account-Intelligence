@@ -872,9 +872,14 @@ Your first report is being generated now!`;
     const messageText = message?.text || '[Message text not available]';
 
     try {
-      // Prepare podcast options if podcast is requested
-      const formats = parsed.outputFormats || ['PDF'];
-      const podcastOptions = formats.includes('PODCAST') ? {
+      // Prepare podcast options and formats
+      const requestedFormats = parsed.outputFormats || ['PDF'];
+      const hasPodcast = requestedFormats.includes('PODCAST');
+
+      // Filter out PODCAST from document formats (ReportFormat only includes PDF, DOCX)
+      const documentFormats = requestedFormats.filter(f => f !== 'PODCAST') as ('PDF' | 'DOCX')[];
+
+      const podcastOptions = hasPodcast ? {
         template: (parsed.podcastPreferences?.template || 'EXECUTIVE_BRIEF') as any,
         duration: (parsed.podcastPreferences?.duration || 'STANDARD') as any,
         deliveryEnabled: true,
@@ -891,7 +896,7 @@ Your first report is being generated now!`;
           companyNames: parsed.additionalCompanies,
         },
         depth: parsed.depth || 'standard',
-        requestedFormats: formats, // Use extracted formats from LLM
+        requestedFormats: documentFormats.length > 0 ? documentFormats : ['PDF'], // Use document formats only
         podcastOptions, // Include podcast options if podcast is requested
         delivery: {
           method: 'WEBEX',
@@ -916,12 +921,11 @@ Your first report is being generated now!`;
         PODCAST: 'audio podcast'
       };
 
-      const formats = parsed.outputFormats || ['PDF'];
-      const formatList = formats.map(f => formatDescriptions[f]).join(' and ');
+      const formatList = requestedFormats.map(f => formatDescriptions[f]).join(' and ');
 
       // Include podcast details if applicable
       let podcastDetail = '';
-      if (formats.includes('PODCAST') && parsed.podcastPreferences) {
+      if (hasPodcast && parsed.podcastPreferences) {
         const templateNames: Record<string, string> = {
           EXECUTIVE_BRIEF: 'Executive Brief',
           STRATEGIC_DEBATE: 'Strategic Debate',
