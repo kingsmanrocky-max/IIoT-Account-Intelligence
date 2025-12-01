@@ -33,6 +33,7 @@ const navigationItems = [
   { name: 'Templates', href: '/templates', icon: Folder, roles: ['USER', 'ADMIN'] },
   { name: 'Schedules', href: '/schedules', icon: Calendar, roles: ['USER', 'ADMIN'] },
   { name: 'Analytics', href: '/analytics', icon: BarChart3, roles: ['USER', 'ADMIN'] },
+  { name: 'Settings', href: '/settings', icon: Settings, roles: ['USER', 'ADMIN'] },
   { name: 'Users', href: '/users', icon: Users, roles: ['ADMIN'] },
   { name: 'Admin', href: '/admin', icon: Shield, roles: ['ADMIN'] },
   { name: 'Prompts', href: '/admin/prompts', icon: MessageSquare, roles: ['ADMIN'] },

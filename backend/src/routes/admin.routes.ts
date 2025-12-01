@@ -3,7 +3,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getAdminService } from '../services/admin.service';
 import { getUserManagementService } from '../services/user-management.service';
 import { getCleanupProcessor } from '../services/cleanup-processor';
-import { authMiddleware, adminMiddleware } from '../middleware/auth.middleware';
+import { authMiddleware, adminMiddleware, AuthRequest } from '../middleware/auth.middleware';
 import logger from '../utils/logger';
 
 interface UpdateSettingsBody {
@@ -420,6 +420,47 @@ export async function adminRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({
           success: false,
           error: { code: 'RESET_ERROR', message },
+        });
+      }
+    }
+  );
+
+  // Send credentials via WebEx
+  fastify.post<{ Params: UserIdParams }>(
+    '/users/:id/send-credentials',
+    async (request: AuthRequest & FastifyRequest<{ Params: UserIdParams }>, reply) => {
+      try {
+        const { id } = request.params;
+        const adminUserId = request.user!.id;
+
+        // Prevent sending to self
+        if (id === adminUserId) {
+          return reply.status(400).send({
+            success: false,
+            error: { code: 'INVALID_TARGET', message: 'Cannot send credentials to yourself' },
+          });
+        }
+
+        await userService.sendCredentialsViaWebex(id, adminUserId);
+
+        return reply.send({
+          success: true,
+          message: 'Credentials sent via WebEx successfully',
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to send credentials';
+        logger.error('Failed to send credentials:', error);
+
+        if (message === 'User not found') {
+          return reply.status(404).send({
+            success: false,
+            error: { code: 'NOT_FOUND', message },
+          });
+        }
+
+        return reply.status(500).send({
+          success: false,
+          error: { code: 'SEND_CREDENTIALS_ERROR', message },
         });
       }
     }

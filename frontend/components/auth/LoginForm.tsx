@@ -35,9 +35,15 @@ export default function LoginForm() {
       setError(null);
       setIsLoading(true);
       const response = await authAPI.login(data);
-      const { token, user } = response.data.data;
+      const { token, user, mustChangePassword } = response.data.data;
       login(token, user);
-      router.push('/dashboard');
+
+      // Redirect based on password change requirement
+      if (mustChangePassword) {
+        router.push('/settings?changePassword=required');
+      } else {
+        router.push('/dashboard');
+      }
     } catch (err: any) {
       setError(err.response?.data?.error?.message || 'Login failed. Please try again.');
     } finally {

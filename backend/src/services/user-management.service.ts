@@ -1,7 +1,9 @@
 // User Management Service - Admin CRUD operations for users
 import { PrismaClient, User, UserRole } from '@prisma/client';
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 import logger from '../utils/logger';
+import { getWebexDeliveryService } from './webex-delivery.service';
 
 const prisma = new PrismaClient();
 
@@ -307,6 +309,59 @@ export class UserManagementService {
       totalSchedules,
       lastActivity: lastActivity?.createdAt || null,
     };
+  }
+
+  // Generate secure random password
+  private generateSecurePassword(): string {
+    const charset = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%';
+    const bytes = crypto.randomBytes(16);
+    let password = '';
+    for (let i = 0; i < 16; i++) {
+      password += charset[bytes[i] % charset.length];
+    }
+    return password;
+  }
+
+  // Send credentials via WebEx
+  async sendCredentialsViaWebex(userId: string, adminUserId: string): Promise<void> {
+    logger.info('Sending credentials via WebEx', { userId, adminUserId });
+
+    // Check if user exists
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Generate temporary password
+    const tempPassword = this.generateSecurePassword();
+    const passwordHash = await bcrypt.hash(tempPassword, 10);
+
+    // Update user - set new password and require change
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordHash,
+        mustChangePassword: true,
+      },
+    });
+
+    // Build WebEx message
+    const message = `**IIoT Account Intelligence - Your Credentials**\n\n` +
+      `Your account credentials have been set.\n\n` +
+      `**Email:** ${user.email}\n` +
+      `**Temporary Password:** ${tempPassword}\n\n` +
+      `**Important:** You must change your password on first login.\n\n` +
+      `Login at: https://34.135.56.108`;
+
+    // Send via WebEx
+    const webexService = getWebexDeliveryService();
+    await webexService.sendWebexMessage(user.email, message, 'email');
+
+    logger.info('Credentials sent via WebEx', {
+      targetUserId: userId,
+      initiatedBy: adminUserId,
+      email: user.email,
+    });
   }
 }
 

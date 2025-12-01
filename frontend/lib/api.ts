@@ -737,6 +737,9 @@ export const adminAPI = {
   resetUserPassword: (id: string, newPassword: string) =>
     api.post<{ success: boolean; message: string }>(`/admin/users/${id}/reset-password`, { newPassword }),
 
+  sendCredentials: (id: string) =>
+    api.post<{ success: boolean; message: string }>(`/admin/users/${id}/send-credentials`),
+
   // Data cleanup
   triggerCleanup: () =>
     api.post<{ success: boolean; data: CleanupStats; message: string }>('/admin/cleanup'),

@@ -10,6 +10,7 @@ import { getWebexDeliveryService } from './webex-delivery.service';
 interface LoginResult {
   user: Omit<User, 'passwordHash'>;
   token: string;
+  mustChangePassword: boolean;
 }
 
 interface RegisterData {
@@ -81,6 +82,7 @@ export class AuthService {
       return {
         user: userWithoutPassword,
         token,
+        mustChangePassword: user.mustChangePassword,
       };
     } catch (error) {
       logger.error('Registration error:', error);
@@ -140,6 +142,7 @@ export class AuthService {
       return {
         user: userWithoutPassword,
         token,
+        mustChangePassword: user.mustChangePassword,
       };
     } catch (error) {
       logger.error('Login error:', error);
@@ -233,10 +236,13 @@ export class AuthService {
       // Hash new password
       const newPasswordHash = await bcrypt.hash(newPassword, 12);
 
-      // Update password
+      // Update password and clear mustChangePassword flag
       await prisma.user.update({
         where: { id: userId },
-        data: { passwordHash: newPasswordHash },
+        data: {
+          passwordHash: newPasswordHash,
+          mustChangePassword: false,
+        },
       });
 
       logger.info(`Password changed for user: ${user.email}`);

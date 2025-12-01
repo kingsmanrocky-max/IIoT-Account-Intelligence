@@ -8,6 +8,7 @@ interface User {
   id: string;
   email: string;
   role: string;
+  mustChangePassword?: boolean;
   profile?: {
     firstName: string;
     lastName: string;

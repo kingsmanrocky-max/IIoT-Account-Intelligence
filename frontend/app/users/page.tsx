@@ -26,6 +26,7 @@ import {
   X,
   Check,
   AlertCircle,
+  Send,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -40,6 +41,7 @@ export default function UsersPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
+  const [showSendCredentialsModal, setShowSendCredentialsModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -102,6 +104,15 @@ export default function UsersPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] });
       setShowDeleteConfirm(false);
+      setSelectedUser(null);
+    },
+  });
+
+  const sendCredentialsMutation = useMutation({
+    mutationFn: (id: string) => adminAPI.sendCredentials(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+      setShowSendCredentialsModal(false);
       setSelectedUser(null);
     },
   });
@@ -313,6 +324,17 @@ export default function UsersPage() {
                               >
                                 <Key className="h-4 w-4" />
                                 Reset Password
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSelectedUser(userItem);
+                                  setShowSendCredentialsModal(true);
+                                  setOpenMenuId(null);
+                                }}
+                                className="flex items-center gap-2 w-full px-4 py-2 text-sm text-meraki-gray-700 hover:bg-meraki-gray-50"
+                              >
+                                <Send className="h-4 w-4" />
+                                Send Credentials
                               </button>
                               <button
                                 onClick={() => {
@@ -631,6 +653,61 @@ export default function UsersPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Send Credentials Modal */}
+      {showSendCredentialsModal && selectedUser && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+            <div className="p-6">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="p-3 bg-meraki-blue/10 rounded-full">
+                  <Send className="h-6 w-6 text-meraki-blue" />
+                </div>
+                <h2 className="text-lg font-semibold text-meraki-gray-900">Send Credentials</h2>
+              </div>
+              <p className="text-meraki-gray-600 mb-2">
+                This will generate a new temporary password for <strong>{selectedUser.email}</strong> and send it via WebEx.
+              </p>
+              <p className="text-sm text-meraki-gray-500 mb-6">
+                The user will be required to change their password on first login.
+              </p>
+              {sendCredentialsMutation.isError && (
+                <div className="flex items-center gap-2 text-red-600 text-sm mb-4">
+                  <AlertCircle className="h-4 w-4" />
+                  {(sendCredentialsMutation.error as Error)?.message || 'Failed to send credentials'}
+                </div>
+              )}
+              {sendCredentialsMutation.isSuccess && (
+                <div className="flex items-center gap-2 text-green-600 text-sm mb-4">
+                  <Check className="h-4 w-4" />
+                  Credentials sent successfully
+                </div>
+              )}
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => {
+                    setShowSendCredentialsModal(false);
+                    setSelectedUser(null);
+                  }}
+                  className="px-4 py-2 text-meraki-gray-700 border border-meraki-gray-300 rounded-lg hover:bg-meraki-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => sendCredentialsMutation.mutate(selectedUser.id)}
+                  disabled={sendCredentialsMutation.isPending}
+                  className="flex items-center gap-2 px-4 py-2 bg-meraki-blue text-white rounded-lg hover:bg-meraki-blue-dark disabled:opacity-50"
+                >
+                  {sendCredentialsMutation.isPending && (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  )}
+                  Send Credentials
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
