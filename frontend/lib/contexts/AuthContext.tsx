@@ -52,16 +52,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(userData);
   };
 
-  const logout = async () => {
-    try {
-      await authAPI.logout();
-    } catch (error) {
+  const logout = () => {
+    // Clear local state immediately
+    localStorage.removeItem('token');
+    setUser(null);
+
+    // Call backend logout endpoint (fire and forget)
+    authAPI.logout().catch((error) => {
       console.error('Logout error:', error);
-    } finally {
-      localStorage.removeItem('token');
-      setUser(null);
-      router.push('/login');
-    }
+    });
+
+    // Navigate to login page
+    router.push('/login');
   };
 
   const refreshUser = async () => {
