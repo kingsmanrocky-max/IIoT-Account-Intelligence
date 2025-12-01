@@ -166,6 +166,15 @@ export class UserManagementService {
         lastName: lastName?.trim() || null,
         role,
         isActive: true,
+        profile: {
+          create: {
+            timezone: 'UTC',
+            defaultLLMModel: 'gpt-4',
+          },
+        },
+      },
+      include: {
+        profile: true,
       },
     });
 
