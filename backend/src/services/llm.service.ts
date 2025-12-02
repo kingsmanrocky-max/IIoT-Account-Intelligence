@@ -149,7 +149,7 @@ Target: 250-350 words`,
 - Highlight trends and patterns
 - Executive-friendly format
 - Forward-looking insights
-Target: 500-700 words`,
+Target: 800-1200 words`,
 };
 
 export class LLMService {

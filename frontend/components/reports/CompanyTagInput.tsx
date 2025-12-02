@@ -20,7 +20,7 @@ export default function CompanyTagInput({
   onCompaniesChange,
   placeholder = 'Type company name and press Enter',
   disabled = false,
-  maxCompanies = 20,
+  maxCompanies = 40,
   enableValidation = false,
 }: CompanyTagInputProps) {
   const [inputValue, setInputValue] = useState('');
